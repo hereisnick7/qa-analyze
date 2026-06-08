@@ -120,20 +120,32 @@ cp config/example/jira/.env.example config/jira/.env
 cp config/example/gitlab/.env.example config/gitlab/.env
 ```
 
-Открой каждый файл и заполни своими данными:
+#### Jira API token
 
-**config/jira/.env:**
+1. Зайди на https://id.atlassian.com/manage-profile/security/api-tokens
+2. Нажми **Create API token**, дай любое название (например `qa-analyze`)
+3. Скопируй токен — он показывается один раз
+
+Открой `config/jira/.env` и заполни:
 ```
-JIRA_URL=https://your-org.atlassian.net
-JIRA_EMAIL=you@example.com
-JIRA_TOKEN=your-api-token      # API token из atlassian.com/account/security
-JIRA_WRITE_ENABLED=true        # нужно для постинга тест-кейсов комментарием
+JIRA_URL=https://your-org.atlassian.net   # URL вашего Jira (спроси у коллег если не знаешь)
+JIRA_EMAIL=you@company.com                # твой email от Atlassian аккаунта
+JIRA_TOKEN=сюда-вставить-токен
+JIRA_WRITE_ENABLED=true
 ```
 
-**config/gitlab/.env:**
+#### GitLab Personal Access Token
+
+1. Зайди в GitLab → правый верхний угол → **Edit profile** → **Access Tokens**
+   (или напрямую: `https://gitlab.your-company.com/-/user_settings/personal_access_tokens`)
+2. Нажми **Add new token**
+3. Название: `qa-analyze`, scope: отметь **read_api**
+4. Нажми **Create personal access token**, скопируй токен
+
+Открой `config/gitlab/.env` и заполни:
 ```
-GITLAB_HOST=gitlab.your-company.com
-GITLAB_TOKEN=glpat-your-token  # Personal Access Token с правами read_api
+GITLAB_HOST=gitlab.your-company.com   # домен вашего GitLab (без https://)
+GITLAB_TOKEN=glpat-сюда-вставить-токен
 ```
 
 ### Настройка базы знаний
