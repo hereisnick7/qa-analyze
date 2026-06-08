@@ -80,31 +80,90 @@ config/
 ### Требования
 
 - [Claude Code](https://claude.ai/code) CLI
-- `workflow` CLI, настроенный с доступом к Jira и GitLab
-  (или адаптируй Bash-команды в `qa-impact-agent.md` под свой CLI)
+- Python 3.9+
+- RTK (Rust Token Killer) — компрессор вывода для агента
 
-### Шаги
+### Установка RTK
 
-1. Скопируй `.claude/` в корень своего проекта (или в `~/.claude/` для глобального использования)
-2. Заполни `config/qa-agent-context.md` данными своего продукта:
-   - Название продукта, ключ Jira-проекта, названия GitLab-репозиториев
-   - Тестовые аккаунты
-   - Классификация рисков по доменам (адаптируй под свой бизнес)
-3. Запусти `/qa-analyze КЛЮЧ-ЗАДАЧИ` в Claude Code
-
-### Адаптация под свой стек
-
-Агент использует следующие CLI-команды (определены в `qa-impact-agent.md`):
+**macOS / Linux:**
 ```bash
-workflow jira-task <KEY>           # получить задачу из Jira
-workflow mrs <project> --state=all  # список MR
-workflow mr <project> <id>          # метаданные MR
-workflow mr-changes <project> <id>  # изменённые файлы
-workflow mr-diff <project> <id>     # diff
-workflow mr-notes <project> <id>    # комментарии к MR
+cargo install --git https://github.com/rtk-ai/rtk
+```
+Или через Homebrew (если доступен).
+
+**Windows:**
+```bash
+cargo install --git https://github.com/rtk-ai/rtk
+```
+Нужен [Rust](https://rustup.rs). После установки `rtk` должен быть в PATH.
+
+> RTK необязателен — без него агент работает, но вывод команд может быть длиннее.
+
+### Установка workflow CLI
+
+```bash
+git clone https://github.com/hereisnick7/qa-analyze.git
+cd qa-analyze
+pip install -e .
 ```
 
-Замени их на свои обёртки над Jira/GitLab API или прямые API-вызовы.
+После этого команда `workflow` доступна глобально.
+
+**Windows:** используй `workflow.cmd` вместо `workflow`.
+
+### Настройка credentials
+
+```bash
+# Скопируй шаблоны
+cp config/example/jira/.env.example config/jira/.env
+cp config/example/gitlab/.env.example config/gitlab/.env
+
+# Заполни своими данными
+```
+
+**config/jira/.env:**
+```
+JIRA_URL=https://your-org.atlassian.net
+JIRA_EMAIL=you@example.com
+JIRA_TOKEN=your-api-token
+JIRA_WRITE_ENABLED=true
+```
+
+**config/gitlab/.env:**
+```
+GITLAB_HOST=gitlab.your-company.com
+GITLAB_TOKEN=glpat-your-token
+```
+
+### Установка агента в Claude Code
+
+```bash
+# Скопируй файлы агента в свой ~/.claude/
+cp -r .claude/agents/qa-impact-agent.md ~/.claude/agents/
+cp -r .claude/skills/qa-analyze ~/.claude/skills/
+cp -r .claude/skills/qa-report ~/.claude/skills/
+```
+
+Или скопируй в `.claude/` конкретного проекта, если хочешь использовать только там.
+
+### Настройка базы знаний
+
+```bash
+cp config/qa-agent-context.md ~/.claude/qa-agent-context.md
+# Или положи рядом с проектом, путь указан в qa-impact-agent.md
+```
+
+Открой файл и заполни:
+- Название продукта и ключ Jira-проекта
+- Названия GitLab-репозиториев
+- Тестовые аккаунты
+- Классификацию рисков под свой домен
+
+### Запуск
+
+```
+/qa-analyze DEV-2795
+```
 
 ---
 
