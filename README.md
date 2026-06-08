@@ -1,124 +1,123 @@
 # /qa-analyze — QA Impact Agent v1.2
 
-> Claude Code skill + sub-agent for backend-aware QA impact analysis.
-> Reads Jira + GitLab MR diff, maps business logic impact, produces a focused test scope — and optionally generates full step-by-step test cases.
+> Скилл + суб-агент для Claude Code. Анализирует задачу перед тестированием: читает Jira и diff MR в GitLab, строит карту влияния, выдаёт фокусированный тест-скоуп — и по запросу генерирует полные тест-кейсы с шагами.
 
 ---
 
-## What it does
+## Что делает
 
-Instead of a QA engineer manually reading a Jira ticket and guessing what to test — the agent does this in ~3 minutes by reading the **actual code diff**, not just the ticket description.
+Вместо того чтобы тестировщик вручную разбирал Jira-тикет и угадывал что проверять — агент делает это за ~3 минуты, читая **реальный код изменений**, а не только описание задачи.
 
-1. Finds the MR in GitLab by Jira task key
-2. Reads the diff for high-risk files
-3. Compares what Jira claims vs what the MR actually implements
-4. Builds an impact map: `[FACT]` / `[HYPOTHESIS]` / `[UNKNOWN]`
-5. Finds hidden dependencies a QA engineer reading Jira alone would miss
-6. Assesses risk by domain rules, not diff size
-7. Produces a focused test scope: P0 (must) / P1 (recommended) / P2 (optional) — hard caps of 4/4/3
-8. On request: generates full step-by-step test cases with preconditions, steps, expected results
-9. Posts test cases to Jira as a comment
+1. Находит MR в GitLab по ключу Jira-задачи
+2. Читает diff рискованных файлов
+3. Сравнивает что Jira заявляет vs что реально сделано в MR
+4. Строит карту влияния: `[FACT]` / `[HYPOTHESIS]` / `[UNKNOWN]`
+5. Находит скрытые зависимости, которые тестировщик, читая только Jira, пропустит
+6. Оценивает риск по доменным правилам, а не по размеру диффа
+7. Выдаёт фокусированный тест-скоуп: P0 (обязательно) / P1 (рекомендовано) / P2 (опционально) — жёсткие капы 4/4/3
+8. По запросу: генерирует полные тест-кейсы с предусловиями, шагами и ожиданиями после каждого шага
+9. Постит тест-кейсы в Jira комментарием
 
 ---
 
-## Usage
+## Использование
 
 ```
 /qa-analyze DEV-2795
-/qa-analyze DEV-2795 --mr=frontend-repo/1148   # skip MR discovery, use known MR
+/qa-analyze DEV-2795 --mr=frontend-repo/1148   # пропустить Discovery, использовать конкретный MR
 ```
 
-After analysis, the agent asks:
+После анализа агент спрашивает:
 > "Расписать полные тест-кейсы с шагами? (P0 / P0+P1 / все)"
 
 ---
 
-## Analysis modes
+## Режимы анализа
 
-| Mode | When | What |
+| Режим | Когда | Что делает |
 |---|---|---|
-| **Light** | Analytics, copy changes, config-only | File list only, P0 scope |
-| **Standard** | Normal feature work | Full analysis, targeted diff for risky files |
-| **Deep** | Auth, payments, KYC, antifraud, bonuses | Full diff, extended dependency tracing |
+| **Light** | Analytics, текстовые правки, конфиг без логики | Только список файлов, P0 |
+| **Standard** | Обычная фича, понятный скоуп | Полный анализ, таргетированный diff для рискованных файлов |
+| **Deep** | Auth, платежи, KYC, антифрод, бонусы | Полный diff, расширенный поиск зависимостей |
 
-Deep mode requires explicit confirmation — the agent proposes it when the task title contains high-risk keywords.
+Deep требует явного подтверждения — агент сам предлагает его, когда заголовок задачи содержит ключевые слова рискованных зон.
 
 ---
 
-## Seed Mode — how the agent learns
+## Seed Mode — как агент становится умнее
 
-After each analysis, the agent surfaces 1–3 questions whose answers would improve future analyses. The orchestrator asks them, you confirm, and the answer is saved to `config/qa-agent-context.md`.
+После каждого анализа агент задаёт 1–3 вопроса, ответы на которые улучшат следующие анализы. Оркестратор спрашивает их у тестировщика, тот подтверждает — ответ сохраняется в `config/qa-agent-context.md`.
 
-Example rule saved after a task:
+Пример правила, сохранённого после задачи:
 ```
-[2024-01-15] GGR is stored in cents. GGR_THRESHOLD=35000 = $350 effective threshold.
+[2024-01-15] GGR хранится в центах. GGR_THRESHOLD=35000 = $350 эффективный порог.
              Context: TASK-123
 ```
 
-The agent reads the full knowledge base before every analysis. Over time it learns your product's domain: which areas are historically unstable, what technical quirks exist, what decisions were made and why.
+Агент читает всю базу знаний перед каждым анализом. Со временем он узнаёт домен вашего продукта: какие зоны исторически нестабильны, какие технические особенности существуют, какие решения были приняты и почему.
 
 ---
 
-## File structure
+## Структура файлов
 
 ```
 .claude/
   agents/
-    qa-impact-agent.md        ← sub-agent system prompt (the "brain")
+    qa-impact-agent.md        ← суб-агент (основная логика)
   skills/
     qa-analyze/
-      SKILL.md                ← /qa-analyze skill entry point (orchestrator)
+      SKILL.md                ← скилл /qa-analyze (оркестратор)
     qa-report/
-      SKILL.md                ← /qa-report skill (post-test documentation)
+      SKILL.md                ← скилл /qa-report (документация после теста)
 config/
-  qa-agent-context.md         ← product knowledge base (fill in for your project)
+  qa-agent-context.md         ← база знаний продукта (заполни под свой проект)
 ```
 
 ---
 
-## Setup
+## Установка
 
-### Prerequisites
+### Требования
 
 - [Claude Code](https://claude.ai/code) CLI
-- `workflow` CLI configured with Jira and GitLab access
-  (or adapt the Bash commands in `qa-impact-agent.md` to your own CLI)
+- `workflow` CLI, настроенный с доступом к Jira и GitLab
+  (или адаптируй Bash-команды в `qa-impact-agent.md` под свой CLI)
 
-### Install
+### Шаги
 
-1. Copy `.claude/` into your project's root (or your `~/.claude/` for global use)
-2. Fill in `config/qa-agent-context.md` with your product details:
-   - Product name, Jira project key, GitLab repo names
-   - Test accounts
-   - Domain risk classification (adjust to your business domain)
-3. Run `/qa-analyze YOUR-TASK-KEY` in Claude Code
+1. Скопируй `.claude/` в корень своего проекта (или в `~/.claude/` для глобального использования)
+2. Заполни `config/qa-agent-context.md` данными своего продукта:
+   - Название продукта, ключ Jira-проекта, названия GitLab-репозиториев
+   - Тестовые аккаунты
+   - Классификация рисков по доменам (адаптируй под свой бизнес)
+3. Запусти `/qa-analyze КЛЮЧ-ЗАДАЧИ` в Claude Code
 
-### Adapting to your stack
+### Адаптация под свой стек
 
-The agent uses these CLI commands (defined in `qa-impact-agent.md`):
+Агент использует следующие CLI-команды (определены в `qa-impact-agent.md`):
 ```bash
-workflow jira-task <KEY>          # fetch Jira task
-workflow mrs <project> --state=all # list MRs
-workflow mr <project> <id>         # MR metadata
-workflow mr-changes <project> <id> # changed files
-workflow mr-diff <project> <id>    # diff
-workflow mr-notes <project> <id>   # MR comments
+workflow jira-task <KEY>           # получить задачу из Jira
+workflow mrs <project> --state=all  # список MR
+workflow mr <project> <id>          # метаданные MR
+workflow mr-changes <project> <id>  # изменённые файлы
+workflow mr-diff <project> <id>     # diff
+workflow mr-notes <project> <id>    # комментарии к MR
 ```
 
-Replace these with your own Jira/GitLab CLI wrappers or direct API calls.
+Замени их на свои обёртки над Jira/GitLab API или прямые API-вызовы.
 
 ---
 
-## Version history
+## История версий
 
-| Version | Changes |
+| Версия | Что добавлено |
 |---|---|
-| v1.0 | Base analysis: MR discovery, Impact Map, test scope |
-| v1.1 | Light/Standard/Deep modes; FACT/HYPOTHESIS/UNKNOWN labels; Seed Mode; hard P0/P1/P2 caps |
-| v1.2 | Step 10: agent offers full step-by-step test cases after analysis; one-command Jira post |
+| v1.0 | Базовый анализ: MR Discovery, Impact Map, тест-скоуп |
+| v1.1 | Режимы Light/Standard/Deep; метки FACT/HYPOTHESIS/UNKNOWN; Seed Mode; жёсткие капы P0/P1/P2 |
+| v1.2 | Шаг 10: агент предлагает расписать полные тест-кейсы с шагами; постинг в Jira одной командой |
 
 ---
 
-## License
+## Лицензия
 
 MIT
