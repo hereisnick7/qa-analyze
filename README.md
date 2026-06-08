@@ -114,56 +114,51 @@ pip install -e .
 ### Настройка credentials
 
 ```bash
-# Скопируй шаблоны
+# Создай папки и скопируй шаблоны
+mkdir -p config/jira config/gitlab
 cp config/example/jira/.env.example config/jira/.env
 cp config/example/gitlab/.env.example config/gitlab/.env
-
-# Заполни своими данными
 ```
+
+Открой каждый файл и заполни своими данными:
 
 **config/jira/.env:**
 ```
 JIRA_URL=https://your-org.atlassian.net
 JIRA_EMAIL=you@example.com
-JIRA_TOKEN=your-api-token
-JIRA_WRITE_ENABLED=true
+JIRA_TOKEN=your-api-token      # API token из atlassian.com/account/security
+JIRA_WRITE_ENABLED=true        # нужно для постинга тест-кейсов комментарием
 ```
 
 **config/gitlab/.env:**
 ```
 GITLAB_HOST=gitlab.your-company.com
-GITLAB_TOKEN=glpat-your-token
+GITLAB_TOKEN=glpat-your-token  # Personal Access Token с правами read_api
 ```
-
-### Установка агента в Claude Code
-
-```bash
-# Скопируй файлы агента в свой ~/.claude/
-cp -r .claude/agents/qa-impact-agent.md ~/.claude/agents/
-cp -r .claude/skills/qa-analyze ~/.claude/skills/
-cp -r .claude/skills/qa-report ~/.claude/skills/
-```
-
-Или скопируй в `.claude/` конкретного проекта, если хочешь использовать только там.
 
 ### Настройка базы знаний
 
-```bash
-cp config/qa-agent-context.md ~/.claude/qa-agent-context.md
-# Или положи рядом с проектом, путь указан в qa-impact-agent.md
-```
-
-Открой файл и заполни:
-- Название продукта и ключ Jira-проекта
-- Названия GitLab-репозиториев
-- Тестовые аккаунты
-- Классификацию рисков под свой домен
+Открой `config/qa-agent-context.md` и заполни под свой продукт:
+- Название продукта, ключ Jira-проекта, названия GitLab-репозиториев
+- Тестовые аккаунты (email + пароль + гео/роль)
+- Классификацию рисков под свой домен (секция Domain Risk Classification)
 
 ### Запуск
 
+Claude Code нужно открыть **из папки репо** — `.claude/` подхватывается автоматически:
+
+```bash
+cd qa-analyze
+claude   # или открой папку в IDE с плагином Claude Code
+```
+
+Затем в чате:
 ```
 /qa-analyze DEV-2795
 ```
+
+**Windows:** если команда `workflow` не найдена — используй `workflow.cmd` напрямую,
+либо добавь папку репо в PATH.
 
 ---
 
