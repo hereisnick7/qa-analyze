@@ -156,18 +156,7 @@ Also append one row to the metrics table in `config/qa-agent-context.md` under `
 | {TODAY} | {KEY} | {Risk level from output} | — | {P0 count} | — | — | {MODE} |
 ```
 
-### 7. After agent output — Jira questions offer
-
-If the agent's `## Unknowns & Questions` section contains **Developer questions**:
-Ask once: "Запостить вопросы к разработчику в Jira комментарием?"
-
-If yes:
-```bash
-workflow jira-comment {KEY} "Вопросы к разработчику по задаче {KEY}:
-<Developer questions from analysis>"
-```
-
-### 8. After agent output — Test Cases offer
+### 7. After agent output — Test Cases offer
 
 After presenting the full analysis, always ask:
 
@@ -199,11 +188,100 @@ Apply all Test Design Techniques:
 - At least 1 negative scenario per P0 flow
 - Data Integrity TC for Critical financial flows
 
-Use concrete test accounts from config/qa-agent-context.md where available.
+Do NOT include specific test account credentials in the output.
 """)
 ```
 
 If no → skip.
+
+### 8. After test cases — Jira comment offer
+
+After test cases are generated (or if user asks to post a comment directly), offer:
+
+> "Запостить комментарий в Jira? (суть + тест-кейсы)"
+
+**Default comment = Суть + тест-кейсы only.**
+
+Then ask separately:
+
+> "Добавить вопросы к разработчику в комментарий?"
+
+Compose the comment based on answers:
+- Суть + тест-кейсы — **always** (if posting)
+- Вопросы к разработчику — **only if user confirms**
+
+#### Comment format — EXACT TEMPLATE (do not deviate)
+
+**CRITICAL:** Use `##` for headers (Markdown/ADF), NOT `h2.` (Jira wiki markup).
+`h2.` renders as plain text in Jira Cloud. `##` renders as a real heading.
+Use `---` (3 dashes) as separator. NOT `----` (4 dashes).
+Read this template carefully before writing the comment file.
+
+```
+## Суть
+
+<2–3 sentences from analysis>
+
+MR: !{id} · {project} · {branch}
+
+---
+
+## Риск: {level}
+
+<1-line reason>
+
+---
+
+## ☑️ Precheck
+
+- <deploy check: MR влит, миграция применена?>
+- <env check: нужные данные/аккаунты/токены готовы?>
+- <⚠️ open question to Dev if any>
+
+---
+
+## P0 — Тест-кейсы
+
+1️⃣ **TC-01 — <name>**
+
+1. <METHOD> <endpoint> `<request body if any>` → <expected result>
+2. <step> → <expected>
+3. <step> → <expected>
+
+---
+
+2️⃣ **TC-02 — <name>**
+
+1. <step> → <expected>
+2. <step> → <expected>
+
+---
+
+## P1 — Тест-кейсы
+
+3️⃣ **TC-03 — <name>**
+
+1. <step> → <expected>
+
+---
+
+## Вопросы к разработчику   ← only if user confirmed
+```
+
+**Format rules:**
+- `##` headers, `---` separators — BOTH between sections and between individual TCs
+- TC anchor: `1️⃣ **TC-01 — Name**` — emoji number + `**bold name**` (double asterisks)
+- Each step on its own numbered line; expected result inline via `→`
+- Request bodies inline as backtick code: `` `{"key": "val"}` ``
+- Precheck section always present when there are deploy/env prerequisites
+- Empty line after every `---` separator and after every TC header before steps
+
+Post via:
+```bash
+workflow jira-comment {KEY} --from-file=/tmp/qa_comment_{KEY}.txt
+```
+
+Write to a temp file first to avoid shell-escaping issues and to allow guard pre-check.
 
 ## Rules
 

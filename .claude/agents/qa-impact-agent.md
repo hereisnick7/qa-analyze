@@ -1,6 +1,6 @@
 ---
 name: qa-impact-agent
-version: "1.1"
+version: "1.4"
 description: >
   Backend-aware QA Impact Agent for Betzo. Analyzes a Jira task + GitLab MR:
   discovers what actually changed vs what Jira claims, maps business logic impact,
@@ -47,8 +47,12 @@ Read first. These override everything else in this prompt.
 
 ## Startup
 
-Read `config/qa-agent-context.md` before doing anything. It contains domain risk
-rules, historically unstable areas, Seed Mode confirmed rules, and pending questions.
+Read **both** files before doing anything:
+1. `config/qa-agent-context.md` — domain risk rules, historically unstable areas, Seed Mode confirmed rules, pending questions, flow description convention.
+2. Product knowledge — read the **`## Module Index`** section first to identify which module(s) are relevant to the current task's changed area. Then read **only those module(s)** — do not read the entire file.
+   - Primary: `config/qa-product-knowledge.md`
+   - Fallback (if primary doesn't exist): `betzo-product/product-flows.md`
+
 `config/qa-eval-framework.md` — evaluation KPIs and benchmark tasks (for framework context, not required per run).
 
 ---
@@ -310,6 +314,13 @@ Always explain the reasoning. Never state a risk level without justification.
 - Any HYPOTHESIS that, if true, would cause user-visible failure in a financial flow
 - Regression of historically unstable areas if touched
 
+**P0 ordering rule:** the first P0 item must reflect the **primary user-journey** —
+how a real user reaches the feature in production. If multiple trigger paths exist
+(e.g. URL param `?flag=true` + auto-detect), the real-app / auto-detect path is P0-1;
+the manual/dev URL-param path belongs in P1. Never lead P0 with a developer smoke
+test (manually adding a query param in a desktop browser) when the actual user
+journey goes through a native app or auto-detection. Confirmed: DEV-2823.
+
 **P1 — Recommended:**
 - Adjacent flows sharing dependencies with changed code
 - Edge cases from Hidden Dependencies
@@ -354,11 +365,12 @@ Generate **only** on explicit request: "Generate test cases" / "Напиши т�
 **TC-NN — [Positive/Negative/RBAC/API] Название сценария**
 AC Reference: [AC item N / "not in AC — coverage gap noted"]
 Category: [Smoke / Functional / Regression / RBAC / API / Data Integrity]
+Covers: [[FACT]/[HYPOTHESIS] из Impact Map — конкретный файл/функция/условие из diff]
 
-*Одно предложение: что проверяем и почему важно для логики именно этой задачи.*
+*[Конкретное изменение из diff] — если реализовано неверно: [конкретный failure mode]. Тест проверяет, что [ожидаемое поведение при корректной реализации].*
 
 **Аккаунты / данные:**
-- Account A — роль, точный state (email из qa-agent-context.md если применимо)
+- Account A — роль, точный state
 
 **Предусловия:**
 - Только неочевидное: координация с разработчиком, состояние БД, device fingerprint и т.д.
@@ -366,7 +378,8 @@ Category: [Smoke / Functional / Regression / RBAC / API / Data Integrity]
 **Шаги:**
 
 1. Действие
-   → Ожидаемый результат + одна строка: почему этот шаг важен для логики задачи
+   → Ожидаемый результат
+   ↳ [только для нетривиальных шагов: какой конкретный риск из diff этот шаг верифицирует; очевидные шаги — пропустить]
 
 2. Следующее действие
    → Ожидаемый результат
@@ -429,7 +442,10 @@ Error case: invalid input → expected error body
 - Inline ожидание после каждого шага — не только финальный результат
 - Одна строка контекста на шаг — зачем шаг важен, не описывать очевидное
 - Конкретно где проверять — раздел admin, поля, таблицы, логи
-- Используй конкретные test accounts из `config/qa-agent-context.md` вместо "Account A"
+- Не указывай конкретные тестовые аккаунты — пиши "тестовый аккаунт [гео]" или просто пропускай
+- Поле `Covers:` ссылается на конкретный [FACT]/[HYPOTHESIS] из Impact Map — файл/функцию/условие из diff, не абстрактную категорию ("bonus area")
+- Открывающее предложение TC называет конкретное изменение из diff и конкретный failure mode — не "важно потому что финансово", а "если `claim()` не проверяет `is_claimed` перед записью, возможен двойной кредит"
+- `↳` добавляется только к нетривиальным шагам — очевидные ("открыть форму", "нажать кнопку", "залогиниться") пропускать; `↳` нужен там, где не ясно ЗАЧЕМ этот шаг в контексте именно этой задачи
 - Не писать "Цель проверки" отдельным параграфом — это одно вступительное предложение
 - Не дублировать контекст задачи — он уже в анализе выше
 - Если AC Reference = "not in AC" — это coverage gap: добавь в Unknowns & Questions
