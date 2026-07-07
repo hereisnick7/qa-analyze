@@ -197,6 +197,42 @@ def text_to_adf(text: str) -> dict:
             content.append({"type": "orderedList", "content": items})
             continue
 
+        if stripped.startswith("|"):
+            rows = []
+            while i < len(lines):
+                row_stripped = lines[i].strip()
+                if not row_stripped.startswith("|"):
+                    break
+                rows.append(row_stripped)
+                i += 1
+
+            def _parse_row(row: str) -> list[str]:
+                return [c.strip() for c in row.strip("|").split("|")]
+
+            def _make_cell(text: str, cell_type: str) -> dict:
+                return {
+                    "type": cell_type,
+                    "attrs": {},
+                    "content": [{"type": "paragraph", "content": _inline_text_nodes(text)}],
+                }
+
+            header_row = _parse_row(rows[0]) if rows else []
+            data_start = 1
+            if len(rows) > 1 and re.match(r"^[\|\-\s:]+$", rows[1]):
+                data_start = 2
+
+            table_rows = [{"type": "tableRow", "content": [_make_cell(h, "tableHeader") for h in header_row]}]
+            for row in rows[data_start:]:
+                cells = _parse_row(row)
+                table_rows.append({"type": "tableRow", "content": [_make_cell(c, "tableCell") for c in cells]})
+
+            content.append({
+                "type": "table",
+                "attrs": {"isNumberColumnEnabled": False, "layout": "default"},
+                "content": table_rows,
+            })
+            continue
+
         paragraph_lines = [stripped]
         i += 1
         while i < len(lines):
@@ -205,6 +241,7 @@ def text_to_adf(text: str) -> dict:
                 not next_stripped
                 or next_stripped == "---"
                 or next_stripped.startswith("```")
+                or next_stripped.startswith("|")
                 or re.match(r"^(#{1,6})\s+(.+)$", next_stripped)
                 or re.match(r"^[-*]\s+(.+)$", next_stripped)
                 or re.match(r"^\d+[.)]\s+(.+)$", next_stripped)
@@ -583,6 +620,74 @@ class JiraClient:
     def get_transitions(self, key: str) -> list:
         """Доступные переходы для задачи (полезно для будущего write)."""
         return self._get(f"/issue/{key}/transitions").get("transitions", [])
+
+    def get_comments(self, key: str, max_results: int = 50) -> list:
+        """
+        Read comments on an issue, oldest first. Each item: id/author/created/updated/body (plain text).
+        Read-only — no write guard. Used to read back a QA comment after the user has
+        edited it (checkboxes ticked, items struck through/removed) as ground truth
+        for what was actually tested.
+        """
+        result = self._get(f"/issue/{key}/comment", {"maxResults": max_results, "orderBy": "created"})
+        out = []
+        for c in result.get("comments", []):
+            out.append({
+                "id": c.get("id"),
+                "author": (c.get("author") or {}).get("displayName"),
+                "created": c.get("created"),
+                "updated": c.get("updated"),
+                "body": adf_to_text(c.get("body")).strip(),
+            })
+        return out
+
+    def _dev_status_get(self, path: str, params: Optional[dict] = None) -> Any:
+        url = f"{self.base_url}/rest/dev-status/1.0{path}"
+        resp = self.session.get(url, params=params, timeout=(5, 15))
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_dev_status(self, key: str) -> list:
+        """
+        Linked merge requests from the Development panel (Jira↔GitLab integration).
+        Returns a list of dicts: id ("path/to/repo!N"), status, url, repository_name,
+        source_branch, target_branch, last_update. Empty list = no linked MR, not an error.
+
+        Confirmed live 2026-07-03 against DEV-2842. Two things the standard Jira Cloud
+        dev-status docs don't make obvious:
+        - The `applicationType` id is NOT the literal string "GitLab" — it's whatever
+          this instance's connect app is registered as (here:
+          "oAuth-gitlab-jira-connect-gitlab.com"). Auto-discovered via /issue/summary
+          instead of hardcoded, since it can differ per Jira instance/integration setup.
+        - Pull requests live at `detail[].pullRequests[]`, not nested under
+          `detail[].repositories[].pullRequests[]` as originally assumed.
+        """
+        issue = self._get(f"/issue/{key}", {"fields": "summary"})
+        issue_id = issue.get("id")
+        summary = self._dev_status_get("/issue/summary", {"issueId": issue_id})
+        instance_types = list(
+            (summary.get("summary", {}).get("pullrequest", {}) or {}).get("byInstanceType", {}).keys()
+        )
+        if not instance_types:
+            return []
+
+        out = []
+        for app_type in instance_types:
+            detail = self._dev_status_get(
+                "/issue/detail",
+                {"issueId": issue_id, "applicationType": app_type, "dataType": "pullrequest"},
+            )
+            for d in detail.get("detail", []):
+                for pr in d.get("pullRequests", []):
+                    out.append({
+                        "id": pr.get("id"),
+                        "status": pr.get("status"),
+                        "url": pr.get("url"),
+                        "repository_name": pr.get("repositoryName"),
+                        "source_branch": (pr.get("source") or {}).get("branch"),
+                        "target_branch": (pr.get("destination") or {}).get("branch"),
+                        "last_update": pr.get("lastUpdate"),
+                    })
+        return out
 
     # ------------------------------------------------------------------
     # Write — guarded and opt-in

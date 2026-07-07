@@ -17,6 +17,7 @@ Entry point for QA impact analysis. Coordinates `qa-impact-agent` with a full co
 ```
 /qa-analyze DEV-XXXX                        # full analysis, mode pre-assessed from title
 /qa-analyze DEV-XXXX --mr=betzo-backend/419 # skip Discovery, use known MR directly
+/qa-analyze DEV-XXXX --retest               # lightweight re-check of a fix, reuses prior analysis.md
 ```
 
 The agent auto-detects `[FE]` / `[BE]` from the Jira title (searches only
@@ -25,12 +26,32 @@ relevant projects). Deep mode and ambiguous cases require user confirmation befo
 `--mr=<project>/<id>` — continue mode: skip Step 0 (MR Discovery) and use the
 provided MR directly. Use after a previous analysis already identified the MR.
 
+`--retest` — for tasks that get tested more than once (fix → re-test → fix
+again). Requires `tasks/qa/{KEY}/analysis.md` from a prior run. Missing →
+"Нет прошлого анализа для {KEY}. Обычный /qa-analyze {KEY} для первого прогона."
+See step 2c and step 3.
+
 ## Algorithm
 
 ### 1. Parse input
 
 Extract Jira key from args. No key → ask: "Укажи ключ задачи, например DEV-2579."
 Extract `--mr=<project>/<id>` if present (continue mode — skip Discovery).
+
+**Auto-detect retest — no flag required.** Before anything else, check:
+```bash
+test -f tasks/qa/{KEY}/analysis.md && echo exists
+```
+If it exists AND the user didn't explicitly ask for a fresh full analysis
+(phrases like "разбери заново", "полный анализ", "с нуля"), treat this as a
+retest trigger — the user coming back to a task that already has an analysis
+is itself the signal, not just the literal `--retest` flag. Ask once:
+
+> "Для {KEY} уже есть анализ от {date из analysis.md}. Прогнать retest (проверить дельту с прошлого раза) вместо полного анализа? (да / нет, разобрать заново)"
+
+"да" → proceed as `--retest` (step 2c). "нет" → proceed as a normal fresh run
+(this will overwrite the prior analysis — see step 6). The explicit `--retest`
+flag still works directly without this question, for scripted/fast use.
 
 ### 2. Quick title check — mode pre-assessment and MR link detection
 
@@ -44,12 +65,29 @@ rtk summary workflow jira-task {KEY}
 
 **2b. Mode pre-assessment.** Read only the **Summary** field. Apply this logic:
 
-**→ Ask confirmation before Deep** when the title contains any of:
+**→ Proceed automatically with Deep** when the title contains any of:
 `cashier`, `bonus`, `deposit`, `withdraw`, `payment`, `wallet`, `balance`,
 `auth`, `login`, `register`, `kyc`, `verification`, `promo`, `coupon`,
 `antifraud`, `multiaccount`, `subscription` (financial/security flows)
 
-Ask: "Задача затрагивает [найденная зона]. Предлагаю **Deep** анализ — полный диф всех файлов, расширенный поиск зависимостей. Подтвердить?"
+No confirmation — this is a deterministic keyword match against
+`config/qa-agent-context.md` → Domain Risk Classification, not a judgment
+call. State it and proceed:
+
+> "Задача затрагивает [найденная зона] → запускаю **Deep** анализ (полный диф всех файлов, расширенный поиск зависимостей)."
+
+This list grows over time via `/qa-report`'s metrics-feedback step: when a
+completed task's risk turns out to have been underestimated and its title
+matched none of these keywords, the orchestrator asks whether to add the
+missing term here. Keep the list flat, lowercase, comma-separated — no
+sub-categories.
+
+*(2026-07-03: this branch used to ask for confirmation before launching Deep.
+Removed once the keyword match itself proved reliable in practice — Deep here
+means "the domain rules already say Critical/High", so the check adds a
+round-trip without adding judgment. The mid-analysis Mode Escalation check in
+step 4b is unaffected — that one fires on a real-time discovery, not a title
+match, and still asks.)*
 
 **→ Ask confirmation for ambiguous cases** when:
 - Title is vague / large scope ("рефакторинг", "обновление", "переработка", no clear domain signal)
@@ -63,6 +101,16 @@ Ask: "Не могу однозначно определить глубину. П
 **→ Proceed immediately with Light** when:
 - Title clearly indicates: analytics events, copy/text changes, config-only, minor UI
 
+### 2c. Retest mode (`--retest`)
+
+Check `tasks/qa/{KEY}/analysis.md` exists — required, it is the context this
+mode reuses. Missing → stop, tell the user to run a normal `/qa-analyze {KEY}`
+first.
+
+Skip mode pre-assessment (2b) — reuse the MR project/id already recorded in
+`analysis.md` (or `--mr` if also passed). Proceed straight to step 3 with the
+retest prompt addition.
+
 ### 3. Launch agent with confirmed mode
 
 ```python
@@ -74,6 +122,18 @@ Analysis mode: {MODE}
 Jira project: DEV
 GitLab projects to search for MR: betzo, betzo-admin, betzo-backend, betzo-wallets, betzo-antifraud
 {If --mr flag provided: "Skip Step 0. Use MR: <project>/<id> directly."}
+{If --retest: "Retest mode — re-analysis vs a prior review, same pattern as
+DEV-2784. Read tasks/qa/{KEY}/analysis.md first — it holds the prior analysis
+of this same MR, including its date. Produce a FULL standard-format output
+(not a separate delta block), but frame it explicitly as a re-analysis:
+Executive Summary states 'Re-analysis of MR !{id}, delta vs {prior date}' plus
+why (new commits pushed, dev note, etc.); the 🔧 Что изменено section header
+becomes 'Что изменено (delta vs {prior date})' and lists only what changed
+since then; carry forward anything from the prior Impact Map/Test Scope that
+is still valid without re-deriving it from scratch, and clearly mark what's
+newly changed. This is the output that replaces the file (see step 6) — it
+should stand alone as the current analysis, not require reading the old file
+to make sense."}
 
 Start by reading: config/qa-agent-context.md
 
@@ -149,7 +209,19 @@ After presenting output to user, silently save the full analysis:
 mkdir -p tasks/qa/{KEY}
 # Write analysis to file — enables /qa-report to read P0 items without conversational context
 ```
-Then write the agent's full output to `tasks/qa/{KEY}/analysis.md`.
+
+Normal run → write the agent's full output to `tasks/qa/{KEY}/analysis.md`,
+overwriting any prior content.
+
+`--retest` run → **also overwrites** `tasks/qa/{KEY}/analysis.md` with the new
+full output. *(2026-07-03: originally designed to append a separate `##
+Retest` block; switched to overwrite after checking DEV-2784 — the one real
+precedent for re-analysis that existed before this feature — which replaced
+the file entirely and framed the new content as "delta vs {prior date}" inline.
+Matching a pattern that already worked beats inventing a new one.)* History
+isn't lost — the fix-history angle instead lives in the file's own "Re-analysis
+of MR !{id}, delta vs {date}" framing, and in git if/when this folder is
+committed.
 
 Also append one row to the metrics table in `config/qa-agent-context.md` under `## Agent Quality Metrics`:
 ```
@@ -217,26 +289,14 @@ Compose the comment based on answers:
 Use `---` (3 dashes) as separator. NOT `----` (4 dashes).
 Read this template carefully before writing the comment file.
 
+**NEVER include Риск or Precheck sections in the comment. Суть + тест-кейсы only.**
+
 ```
 ## Суть
 
 <2–3 sentences from analysis>
 
 MR: !{id} · {project} · {branch}
-
----
-
-## Риск: {level}
-
-<1-line reason>
-
----
-
-## ☑️ Precheck
-
-- <deploy check: MR влит, миграция применена?>
-- <env check: нужные данные/аккаунты/токены готовы?>
-- <⚠️ open question to Dev if any>
 
 ---
 
@@ -273,7 +333,7 @@ MR: !{id} · {project} · {branch}
 - TC anchor: `1️⃣ **TC-01 — Name**` — emoji number + `**bold name**` (double asterisks)
 - Each step on its own numbered line; expected result inline via `→`
 - Request bodies inline as backtick code: `` `{"key": "val"}` ``
-- Precheck section always present when there are deploy/env prerequisites
+- NO Риск section, NO Precheck section — ever
 - Empty line after every `---` separator and after every TC header before steps
 
 Post via:
@@ -287,7 +347,8 @@ Write to a temp file first to avoid shell-escaping issues and to allow guard pre
 
 - Never skip Step 0 unless `--mr` is provided
 - Never auto-generate test cases
-- Deep mode always requires user confirmation before launch
+- Deep mode triggered by an explicit domain keyword match proceeds automatically — no confirmation, state the detected zone and launch
+- Deep mode triggered mid-analysis (Mode Escalation, step 4b) still requires confirmation — that's a real-time discovery, not a keyword match
 - Ambiguous cases always require user confirmation before launch
 - Seed Mode answers are written by the orchestrator, not the agent
 - One `/qa-analyze` call = one full analysis session

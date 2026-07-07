@@ -3,6 +3,8 @@ Jira + Confluence CLI commands. Called from cli/agent.py dispatcher.
 run_command() returns True if the command was handled, False otherwise.
 """
 
+from __future__ import annotations
+
 import sys
 import argparse
 from pathlib import Path
@@ -245,6 +247,37 @@ def cmd_jira_transition(key: str, target: str, comment: str = None, comment_from
     print(f"\n  {key} переведён в «{result.get('target')}».\n")
 
 
+def cmd_jira_comments(key: str):
+    comments = _get_jira().get_comments(key)
+    print(f"\n  Комментарии {key} ({len(comments)}):\n")
+    if not comments:
+        print("  (нет)\n")
+        return
+    for c in comments:
+        date = (c.get("created") or "")[:16].replace("T", " ")
+        print(f"  [{c.get('id')}] {c.get('author', '?')} · {date}")
+        for line in (c.get("body") or "").splitlines():
+            print(f"      {line}")
+        print()
+
+
+def cmd_jira_dev_status(key: str):
+    try:
+        prs = _get_jira().get_dev_status(key)
+    except Exception as e:
+        print(f"\n  dev-status недоступен для {key}: {e}\n")
+        return
+    if not prs:
+        print(f"\n  Для {key} нет привязанного MR в Development panel.\n")
+        return
+    print(f"\n  Development panel — {key}:\n")
+    for pr in prs:
+        print(f"  {pr['id']} · {pr['status']} · {pr['repository_name']}")
+        print(f"      {pr['source_branch']} → {pr['target_branch']}")
+        print(f"      {pr['url']}")
+    print()
+
+
 def cmd_jira_attachments(key: str):
     attachments = _get_jira().list_attachments(key)
     print(f"\n  Вложения {key} ({len(attachments)}):\n")
@@ -383,7 +416,7 @@ def cmd_confluence_create(space: str, title: str, text: str, from_file: str = No
 
 JIRA_COMMANDS = {
     "jira-info", "jira-mine", "jira-task", "jira-search", "jira-transitions",
-    "jira-attachments", "jira-download",
+    "jira-attachments", "jira-download", "jira-comments", "jira-dev-status",
     "jira-append", "jira-set-description", "jira-comment", "jira-transition",
     "confluence-page", "confluence-update", "confluence-create",
 }
@@ -423,6 +456,16 @@ def run_command(cmd: str, parts: list) -> bool:
                 print("  Использование: jira-attachments <KEY>")
             else:
                 cmd_jira_attachments(parts[1].upper())
+        elif cmd == "jira-comments":
+            if len(parts) < 2:
+                print("  Использование: jira-comments <KEY>")
+            else:
+                cmd_jira_comments(parts[1].upper())
+        elif cmd == "jira-dev-status":
+            if len(parts) < 2:
+                print("  Использование: jira-dev-status <KEY>  (экспериментально)")
+            else:
+                cmd_jira_dev_status(parts[1].upper())
         elif cmd == "jira-download":
             if len(parts) < 2:
                 print("  Использование: jira-download <KEY> [--id=<id>] [--name=<filename>] [--out=<dir>] [--all]")
