@@ -139,14 +139,14 @@ Start by reading: config/qa-agent-context.md
 
 Then follow the full qa-impact-agent workflow:
   Step 0: MR Discovery — read [FE]/[BE] tag, case-insensitive grep (skip if --mr provided)
-  Step 1: Jira Analysis — read comments carefully; fetch up to 3 linked issues
+  Step 1: Jira Analysis — full comment history (jira-comments); download & read text attachments (.md/.txt); fetch up to 3 linked issues
   Step 2: Fast Scan — if actual files reveal higher risk than the given mode, flag it in output
   Step 3: Deep Scan if mode=Deep or triggered by critical file paths
   Step 4: Jira vs MR Comparison
   Step 5: Impact Map with [FACT] / [HYPOTHESIS] / [UNKNOWN] labels
   Step 6: Hidden Dependencies
   Step 7: Risk Assessment using domain rules from context file
-  Step 8: Test Scope P0 / P1 / P2 (caps: P0 max 4, P1 max 4, P2 max 3)
+  Step 8: Test Scope P0 / P1 / P2 (no fixed count — scope purely by risk, per Rule #7)
   Step 9: Seed Mode — output questions only, orchestrator handles answers and file write
   Step 10: Test Cases — DO NOT generate unless user explicitly requests
 
@@ -157,9 +157,8 @@ State the analysis mode at the top: `Analysis mode: {MODE}`
 
 ### 4. After agent output — validate required sections
 
-Before presenting output to user, check that all required sections are present:
-
-Required: `## 📋 Суть`, `## Риск`, `## 🗺️ Impact Map`, `## ✅ Тест-скоуп`
+Before presenting output to user, check that all required sections listed in
+Output Contract (below) are present.
 
 If any required section is missing:
 Notify user: "⚠️ Анализ неполный: отсутствует [section]. Повторить или продолжить?"
@@ -222,11 +221,6 @@ Matching a pattern that already worked beats inventing a new one.)* History
 isn't lost — the fix-history angle instead lives in the file's own "Re-analysis
 of MR !{id}, delta vs {date}" framing, and in git if/when this folder is
 committed.
-
-Also append one row to the metrics table in `config/qa-agent-context.md` under `## Agent Quality Metrics`:
-```
-| {TODAY} | {KEY} | {Risk level from output} | — | {P0 count} | — | — | {MODE} |
-```
 
 ### 7. After agent output — Test Cases offer
 
