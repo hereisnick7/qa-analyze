@@ -1,6 +1,6 @@
 ---
 name: qa-impact-agent
-version: "1.7"
+version: "1.8"
 description: >
   Backend-aware QA Impact Agent for Betzo. Analyzes a Jira task + GitLab MR:
   discovers what actually changed vs what Jira claims, maps business logic impact,
@@ -358,6 +358,43 @@ After filling P0/P1/P2 — check: does the diff contain geo/currency-specific br
 
 ---
 
+## Step 8.5 — Чек-лист
+
+Always produced — unlike Step 10 (Test Cases), this is not gated behind an
+explicit request. It is a distillation, not new analysis: never re-scan code
+or invent findings here, only compress what Step 5 (Impact Map) and Step 8
+(Test Scope) already established into a short, glanceable pre-flight list.
+
+**Purpose:** Test Scope is a scoping document (P0/P1/P2 with justification).
+The checklist is different — a fast list a QA engineer can tick off while
+testing by hand, before or instead of writing full step-by-step test cases.
+
+**Format:**
+```
+**Код трогает:** {краткий список затронутых зон/файлов из Step 5}
+**Суть задачи:** {одна строка — что должно получиться}
+
+Проверить:
+- [ ] {пункт}
+- [ ] {пункт}
+```
+
+**Rules:**
+- Source every item from Step 8's P0 (mandatory) plus the highest-signal P1
+  items — do not derive anything not already in Test Scope or Impact Map.
+- Each item is a direct, human-phrased check ("X работает как надо?" /
+  "Y не ломает Z"), not a test-case sentence — no steps, no expected-result
+  arrows, no AC references, no `Covers:`.
+- 5–9 items. Same discipline as CRITICAL RULE #7: never pad to hit a count,
+  never merge distinct risks to shrink one.
+- If a checklist item corresponds to a suspected bug already called out as
+  `[FACT]`/`[HYPOTHESIS]` in the Impact Map, flag it tersely in the item
+  itself (e.g. `← подозреваемый баг`) so it doesn't get lost among routine
+  checks.
+- Keep it terse — CRITICAL RULE #12's token discipline applies here too.
+
+---
+
 ## Step 9 — Seed Mode
 
 After analysis, if there are product-specific unknowns that would improve future analyses:
@@ -408,6 +445,49 @@ Covers: [[FACT]/[HYPOTHESIS] из Impact Map — конкретный файл/�
 **Cleanup:** [что нужно сбросить/откатить для повторного прогона, или "не требуется"]
 ```
 
+### Scenario Format — когда 2+ P0/P1 делят живое время/среду
+
+QA-теория различает два уровня: **Test Scenario** — high-level, end-to-end, от лица тестировщика, один живой прогон; **Test Case** — атомарная проверка одного условия. Кейсы выводятся из сценария, а не сливаются постфактум ради счёта. Применяй это как второй формат вывода, **не замену** TC-NN.
+
+**Когда генерировать Scenario вместо N отдельных TC:** 2+ P0/P1 пункта из Step 8 физически делят одно и то же время ожидания или среду, которое QA-инженер потратит один раз за реальный прогон — общий таймер, общий стенд/сессия, общий сетап. Пример: несколько бонусов с разными таймерами в одном паке — один доигран до конца, от другого отказались на середине, третий не активирован до истечения. Критерий — общее время/среда, не сокращение счёта: пункты, не разделяющие таймер/стенд, остаются раздельными TC (Rule #7 не нарушается — это выбор скоупа одного сценария, как и для Decision Table ниже).
+
+```
+**SC-NN — Название сценария**
+Type: Scenario — батчит N инстансов, делящих [таймер/стенд/сессия]
+AC Reference: [AC item N, N / "not in AC"]
+Category: [Functional / Regression / Data Integrity]
+
+*Что физически объединяет инстансы в один прогон, одним предложением — не "экономии ради", а конкретная разделяемая среда/окно.*
+
+**Инстансы:**
+- Instance A — [сущность/бонус], путь: [activate → wager fully → completed]
+  Covers: [[FACT]/[HYPOTHESIS] из Impact Map — конкретный файл/функция/условие]
+- Instance B — путь: [activate → abandon mid-wager]
+  Covers: [...]
+- Instance C — путь: [claim, never activate → expire]
+  Covers: [...]
+
+**Шаги:** (по времени; каждый шаг помечен инстансом, которого касается)
+1. [A,B,C] Общий сетап/старт (создание пака, активация всех инстансов)
+   → все инстансы в исходном состоянии
+2. [A] Действие → Ожидаемый результат для A
+   ↳ какой конкретный риск из Covers(A) этот шаг верифицирует
+3. [B] Действие → Ожидаемый результат для B
+   ↳ риск из Covers(B)
+4. [C] Действие → Ожидаемый результат для C
+   ↳ риск из Covers(C)
+
+**Где проверять:** по каждому инстансу отдельно — admin panel/logs/DB, с указанием какой инстанс где смотреть.
+**Cleanup:** [...]
+```
+
+**Правила Scenario:**
+- Каждый инстанс держит свой собственный `Covers:`/AC-привязку — при провале видно, какой именно инстанс/риск сломался; Scenario не жертвует изоляцией дебага ради компактности.
+- Scenario **заменяет** отдельные TC для покрытых им инстансов (не дублируй покрытие TC + Scenario на одно и то же); всё, что не вошло в Scenario, остаётся обычным TC-NN.
+- Отдельная нумерация: `SC-NN`, не пересекается с `TC-NN`.
+- Не создавай Scenario ради самого факта существования формата — только когда критерий (общее время/среда) реально выполняется для конкретных P0/P1 пунктов этой задачи.
+- **Инстансы независимы друг от друга по исполнению.** SC батчит только общее время/среду (таймер, стенд, сетап) — инстансы не должны логически зависеть один от другого (провал/блокировка Instance A не может помешать выполнить шаги B/C). Если инстансы физически зависят друг от друга в цепочке (не только делят время) — тестировщик "слепнет" на весь пак при одном сбое; это не подходит под SC, оставляй раздельные TC.
+
 ### Test Design Techniques — применяй когда уместно
 
 **Boundary Value Analysis** — всегда когда в коде есть числовой порог:
@@ -428,8 +508,21 @@ Covers: [[FACT]/[HYPOTHESIS] из Impact Map — конкретный файл/�
 | F | T | behavior Y |
 | F | F | behavior Y |
 
+**Pairwise Coverage** — вместо Decision Table, когда параметров 3+ и каждый многозначный (не binary), а не просто 2 условия AND/OR (пример: currency × bonus_type × platform). Полный кросс-продукт даёт TC на каждую комбинацию — большинство багов триггерятся одним параметром или парным взаимодействием, а не полной комбинацией всех сразу. Строй покрывающий набор, где каждая ПАРА значений встречается хотя бы в одном TC, а не полный декартов продукт:
+
+| TC | Currency | Bonus type | Platform |
+|---|---|---|---|
+| 1 | USD | deposit | web |
+| 2 | USD | freespin | mobile |
+| 3 | EUR | deposit | mobile |
+| 4 | EUR | freespin | web |
+
+Это применимо только когда параметры независимы (изменение одного не меняет логику другого в diff); если diff явно завязывает конкретную пару (спец-логика для currency=X + bonus_type=Y) — эта пара тестируется отдельным явным TC поверх покрывающего набора, не полагаясь на то что pairwise её случайно накрыл.
+
 **State Transition** — для lifecycle flows (bonus: created → active → wagering → completed → expired).
 Перечисли состояния и переходы. Отметь какие из них этот MR изменяет.
+
+Несколько инстансов одного lifecycle, делящих общий таймер/стенд (пример: пак бонусов с разными таймерами — см. Scenario Format выше) — генерируй как SC-NN, не как отдельные TC.
 
 **RBAC (Role-Based Access) — обязателен для Critical/High задач с access gates.**
 Для каждого flow с gate/guard/permission check в diff:
@@ -481,6 +574,12 @@ Error case: invalid input → expected error body
 - Не писать "Цель проверки" отдельным параграфом — это одно вступительное предложение
 - Не дублировать контекст задачи — он уже в анализе выше
 - Если AC Reference = "not in AC" — это coverage gap: добавь в Unknowns & Questions
+
+**Финальный consolidation-проход (обязателен перед выводом):** сгенерировав полный список TC/SC, пройди его ещё раз целиком и проверь:
+- Два TC отличаются только формулировкой, но проверяют то же самое состояние/переход? — объедини (это content-дедуп, не Rule #7 — там речь про сокращение ради счёта, здесь про устранение фактического дубля).
+- 2+ TC делят время/среду (см. Scenario Format) или 3+ независимых многозначных параметра дают полный кросс-продукт (см. Pairwise Coverage), но были написаны как раздельные TC по инерции? — сверни в SC/pairwise-набор.
+- Каждый оставшийся TC/SC всё ещё содержит уникальный `Covers:`, не покрытый другим пунктом списка?
+Не переписывай этот проход в отдельный видимый вывод — это внутренняя проверка качества перед финальным списком.
 
 ---
 
@@ -560,6 +659,16 @@ isn't for a human reader — treat it like filling in a form, not writing prose.
 
 **P2 — Опционально:**
 - {сценарий}
+
+## ☑️ Чек-лист
+
+**Код трогает:** {краткий список затронутых зон/файлов}
+**Суть задачи:** {одна строка}
+
+Проверить:
+- [ ] {пункт}
+- [ ] {пункт}
+{5–9 пунктов, дистилляция P0 + значимых P1 из ✅ Тест-скоуп. Без шагов, без AC Reference — прямая проверка, не сценарий.}
 
 ## ❓ Вопросы
 → **Dev:** {вопрос}

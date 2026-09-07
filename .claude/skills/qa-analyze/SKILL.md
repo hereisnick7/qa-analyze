@@ -319,8 +319,17 @@ MR: !{id} · {project} · {branch}
 
 ---
 
+## ✅ Чек-лист
+
+- [ ] <пункт>
+- [ ] <пункт>
+
+---
+
 ## Вопросы к разработчику   ← only if user confirmed
 ```
+
+**Чек-лист block:** always append it as the last section (after the last P-tier, before an optional Вопросы block) — copy the bullet list verbatim from the analysis's `## ☑️ Чек-лист` section (drop its "Код трогает:"/"Суть задачи:" header lines, just the checkboxes). If the comment is split across multiple parts because of the ~10 000-character-per-comment guard limit, the checklist goes only in the last part.
 
 **Format rules:**
 - `##` headers, `---` separators — BOTH between sections and between individual TCs
@@ -329,6 +338,12 @@ MR: !{id} · {project} · {branch}
 - Request bodies inline as backtick code: `` `{"key": "val"}` ``
 - NO Риск section, NO Precheck section — ever
 - Empty line after every `---` separator and after every TC header before steps
+
+**Length guard: ~10 000 characters per comment, measured as Python string length (`len(text)`), not UTF-8 bytes.** Emoji-heavy text (TC anchors, checkboxes) makes byte count run ~1.5–2× higher than char count — sizing splits off `wc -c` undercounts how many will fit and produces an oversized part that the guard then rejects. Before posting, check with:
+```bash
+python3 -c "print(len(open('/tmp/qa_comment_{KEY}.txt', encoding='utf-8').read()))"
+```
+If a single ticket's full P0+P1+P2 (+ Чек-лист on the last part) exceeds ~9 300 chars, split into multiple comments along P-tier boundaries (never split a single TC across two parts) — e.g. Part 1 = Суть + P0, Part 2 = P1, Part 3 = P2 + Чек-лист. Prefix parts 2+ with a one-line `_(продолжение {KEY}, часть N/M)_` instead of repeating the Суть block. Post each part as its own `workflow jira-comment` call, in order.
 
 Post via:
 ```bash
@@ -352,7 +367,7 @@ Write to a temp file first to avoid shell-escaping issues and to allow guard pre
 The agent produces the complete analysis output. Relay it directly to the user.
 
 Required sections (empty section → `none`):
-`## 📋 Суть`, `## Риск`, `## 🔧 Что изменено`, `## 🗺️ Impact Map`, `## ✅ Тест-скоуп`
+`## 📋 Суть`, `## Риск`, `## 🔧 Что изменено`, `## 🗺️ Impact Map`, `## ✅ Тест-скоуп`, `## ☑️ Чек-лист`
 
 Optional sections (include only when applicable):
 `## 🔗 Скрытые зависимости`, `## ❓ Вопросы`, `## ⚠️ Требует внимания`, `## 🌱 Seed Mode`, `## Test Cases`
