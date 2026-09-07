@@ -296,6 +296,16 @@ def cmd_jira_attachments(key: str):
     print()
 
 
+def cmd_jira_attach(key: str, file_path: str, dry_run: bool = False):
+    result = _get_jira().upload_attachment(key, file_path, dry_run=dry_run)
+    if dry_run:
+        size_kb = f"{result['size'] / 1024:.1f}KB"
+        print(f"\n  DRY RUN: файл '{result['filename']}' ({size_kb}) будет прикреплён к {key}.\n")
+        return
+    size_kb = f"{result['size'] / 1024:.1f}KB"
+    print(f"\n  Файл '{result['filename']}' ({size_kb}) прикреплён к {key}.\n")
+
+
 def cmd_jira_download(key: str, attachment_id: str = None, name: str = None, out: str = None, all_files: bool = False):
     import os
     from pathlib import Path as _Path
@@ -416,7 +426,7 @@ def cmd_confluence_create(space: str, title: str, text: str, from_file: str = No
 
 JIRA_COMMANDS = {
     "jira-info", "jira-mine", "jira-task", "jira-search", "jira-transitions",
-    "jira-attachments", "jira-download", "jira-comments", "jira-dev-status",
+    "jira-attachments", "jira-attach", "jira-download", "jira-comments", "jira-dev-status",
     "jira-append", "jira-set-description", "jira-comment", "jira-transition",
     "confluence-page", "confluence-update", "confluence-create",
 }
@@ -456,6 +466,16 @@ def run_command(cmd: str, parts: list) -> bool:
                 print("  Использование: jira-attachments <KEY>")
             else:
                 cmd_jira_attachments(parts[1].upper())
+        elif cmd == "jira-attach":
+            if len(parts) < 3:
+                print("  Использование: jira-attach <KEY> <file_path> [--dry-run]")
+            else:
+                parser = argparse.ArgumentParser(prog="jira-attach", add_help=False)
+                parser.add_argument("key")
+                parser.add_argument("file_path")
+                parser.add_argument("--dry-run", action="store_true")
+                args = parser.parse_args(parts[1:])
+                cmd_jira_attach(args.key.upper(), args.file_path, dry_run=args.dry_run)
         elif cmd == "jira-comments":
             if len(parts) < 2:
                 print("  Использование: jira-comments <KEY>")

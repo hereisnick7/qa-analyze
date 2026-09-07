@@ -147,7 +147,6 @@ Then follow the full qa-impact-agent workflow:
   Step 6: Hidden Dependencies
   Step 7: Risk Assessment using domain rules from context file
   Step 8: Test Scope P0 / P1 / P2 (no fixed count — scope purely by risk, per Rule #7)
-  Step 9: Seed Mode — output questions only, orchestrator handles answers and file write
   Step 10: Test Cases — DO NOT generate unless user explicitly requests
 
 Produce output in the standard format starting with Executive Summary.
@@ -183,23 +182,6 @@ Ask the user: "Агент нашёл MR !<id> по содержимому, не 
 - User confirms → proceed, analysis is valid
 - User says no → ask for correct MR link, re-launch with `--mr=` flag
 - No response → do not present the analysis as actionable
-
-### 5. After agent output — Seed Mode handling
-
-If the agent's output contains a `## Seed Mode` section with questions:
-
-1. Write PENDING entries to `config/qa-agent-context.md` under `## Seed Mode: Pending Questions`:
-   ```
-   PENDING [YYYY-MM-DD] <question>. Triggered by: <KEY>
-   ```
-2. Ask the user each question directly in chat.
-3. For each answer:
-   - Confirmed → append to `## Seed Mode Rules`: `- [YYYY-MM-DD] <rule>. Context: <KEY>`
-     and update PENDING → remove or mark DECLINED
-   - Declined → mark `DECLINED [YYYY-MM-DD] <question>`
-4. Confirm: "Сохранено в базу знаний агента."
-
-If no Seed Mode section → skip.
 
 ### 6. Save analysis to file
 
@@ -352,6 +334,27 @@ workflow jira-comment {KEY} --from-file=/tmp/qa_comment_{KEY}.txt
 
 Write to a temp file first to avoid shell-escaping issues and to allow guard pre-check.
 
+### 8b. Optional — HTML checklist delivery (explicit request only)
+
+Separate from the text comment above, never a replacement for it. Only offer
+when the user asks for it directly ("html чек-лист", "тест-план в html",
+"сделай как в прошлый раз") — never proactively. Full mechanism:
+[`docs/agent/qa-html-checklist.md`](../../../docs/agent/qa-html-checklist.md).
+
+1. Re-invoke `qa-impact-agent` with the same test-case scope as step 7, adding:
+   "Also deliver as HTML per `docs/agent/qa-html-checklist.md` — fill
+   `.claude/skills/qa-analyze/assets/qa-checklist-template.html` and write to
+   `tasks/qa/{KEY}/checklist.html`."
+2. After it returns, verify tag balance yourself before offering delivery
+   (the doc above has the exact check) — do not skip this even if the agent
+   reports success.
+3. Ask: "Прикрепить этот HTML к задаче в Jira? (вложение, не тело коммента —
+   Jira не рендерит HTML)"
+4. If yes: `workflow jira-attach {KEY} tasks/qa/{KEY}/checklist.html --dry-run`
+   first, show the result, confirm, then run it for real. Requires
+   `JIRA_WRITE_ENABLED=true` (same guard as `jira-comment`).
+5. If no: leave the file in the task folder, tell the user its local path.
+
 ## Rules
 
 - Never skip Step 0 unless `--mr` is provided
@@ -359,7 +362,6 @@ Write to a temp file first to avoid shell-escaping issues and to allow guard pre
 - Deep mode triggered by an explicit domain keyword match proceeds automatically — no confirmation, state the detected zone and launch
 - Deep mode triggered mid-analysis (Mode Escalation, step 4b) still requires confirmation — that's a real-time discovery, not a keyword match
 - Ambiguous cases always require user confirmation before launch
-- Seed Mode answers are written by the orchestrator, not the agent
 - One `/qa-analyze` call = one full analysis session
 
 ## Output Contract
@@ -370,7 +372,7 @@ Required sections (empty section → `none`):
 `## 📋 Суть`, `## Риск`, `## 🔧 Что изменено`, `## 🗺️ Impact Map`, `## ✅ Тест-скоуп`, `## ☑️ Чек-лист`
 
 Optional sections (include only when applicable):
-`## 🔗 Скрытые зависимости`, `## ❓ Вопросы`, `## ⚠️ Требует внимания`, `## 🌱 Seed Mode`, `## Test Cases`
+`## 🔗 Скрытые зависимости`, `## ❓ Вопросы`, `## ⚠️ Требует внимания`, `## Test Cases`
 
 ## Fail-fast
 

@@ -595,6 +595,35 @@ class JiraClient:
                         f.write(chunk)
         return str(dest)
 
+    def upload_attachment(self, key: str, file_path: str, *, dry_run: bool = False) -> dict:
+        """
+        Upload a local file as an attachment on issue `key`.
+        Requires JIRA_WRITE_ENABLED=true. Jira's attachment endpoint needs
+        multipart/form-data + `X-Atlassian-Token: no-check`, and must NOT carry
+        the client's default `Content-Type: application/json` header — passing
+        `Content-Type: None` below strips it for this one request so `requests`
+        can set the correct multipart boundary itself.
+        """
+        self._write_guard()
+        from pathlib import Path as _Path
+        path = _Path(file_path).expanduser().resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"Attachment file not found: {path}")
+        size = path.stat().st_size
+        if dry_run:
+            return {"dry_run": True, "key": key, "file_path": str(path), "filename": path.name, "size": size}
+        url = f"{self.base_url}/rest/api/3/issue/{key}/attachments"
+        with open(path, "rb") as f:
+            resp = self.session.post(
+                url,
+                files={"file": (path.name, f)},
+                headers={"X-Atlassian-Token": "no-check", "Content-Type": None},
+                timeout=(5, 60),
+            )
+        resp.raise_for_status()
+        uploaded = resp.json() if resp.text.strip() else []
+        return {"key": key, "filename": path.name, "size": size, "uploaded": uploaded}
+
     def search(self, jql: str, fields: Optional[list] = None, max_results: int = 50) -> dict:
         # POST /rest/api/3/search/jql — актуальный эндпоинт (GET /search — 410 Gone)
         # Без явного fields API возвращает только id; передаём дефолтный набор.

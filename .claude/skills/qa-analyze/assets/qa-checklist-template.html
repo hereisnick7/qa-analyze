@@ -1,0 +1,390 @@
+<!--
+  qa-checklist-template.html — base template for /qa-analyze HTML test-case delivery.
+
+  Origin: built live 2026-09-07 for DEV-2685 (Sequential Bonuses client test plan),
+  approved by the user as "the base to reuse going forward — only the information
+  changes, style/notes/dropdowns stay as-is."
+
+  HOW TO USE THIS TEMPLATE:
+  1. Copy this whole file, keep <style> and <script> blocks BYTE-FOR-BYTE unchanged —
+     they are generic (id/class-driven), not content-specific. Do not regenerate CSS/JS
+     from scratch; that is the expensive, error-prone part if hand-authored per run.
+  2. Fill in <title>, the header title/subtitle, and the Summary/Blockers sections
+     with the real task's content.
+  3. For every test case, copy ONE "TC EXAMPLE" block below and fill in its fields —
+     do not invent new markup patterns. Keep each <details class="tc"> a self-contained
+     copy so a missing closing tag stays localized.
+  4. For a Scenario (2+ TCs sharing one live timer/environment), copy the "SC EXAMPLE"
+     block instead — same outer shape, instances rendered as labeled sub-blocks.
+  5. Appendices (evidence tables, resolved TBDs, Dev/PO questions) go in
+     <details class="appendix"> blocks — collapsed by default, for reference material
+     that supports the plan but isn't itself a checklist item.
+  6. After filling content, verify structurally before shipping:
+       grep -c 'class="tc"' file.html   → should equal number of test cases
+       count of <details vs </details>  → must match (unbalanced tags break the page)
+  7. Delivery: Jira comments do NOT render HTML/CSS/JS (sanitized) — this file goes
+     out as a Jira ATTACHMENT (or a local file next to the task), never pasted into
+     a comment body.
+-->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{TASK_KEY}} — {{короткое название задачи}}, тест-план</title>
+<style>
+  :root{
+    --bg:#f6f5f2; --card:#ffffff; --ink:#1c1b19; --muted:#6b6a66; --line:#e4e1da;
+    --p0:#c0392b; --p0-bg:#fbeae8; --p1:#b8790a; --p1-bg:#fdf1de; --p2:#5b6b78; --p2-bg:#eaeff2;
+    --pos:#1e7d4b; --pos-bg:#e6f5ec; --neg:#a83279; --neg-bg:#f8e9f2; --reg:#5b4b9e; --reg-bg:#efeaf9;
+    --fact:#1e6f9e; --hyp:#a06b1e; --unk:#8a3b3b; --block:#c0392b; --accent:#8a5a2b;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.5;padding-bottom:80px;}
+  a{color:var(--accent);}
+  header.top{position:sticky;top:0;z-index:20;background:#1c1b19;color:#f6f5f2;padding:18px 24px;box-shadow:0 2px 10px rgba(0,0,0,.15);}
+  header.top h1{margin:0 0 4px;font-size:19px;font-weight:700;}
+  header.top .sub{font-size:12.5px;color:#c9c6bd;}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;}
+  .controls button{background:#33312c;color:#f6f5f2;border:1px solid #4a473f;border-radius:20px;padding:5px 13px;font-size:12.5px;cursor:pointer;}
+  .controls button.active{background:#f6f5f2;color:#1c1b19;font-weight:600;}
+  .controls input[type=search]{flex:1;min-width:160px;padding:6px 12px;border-radius:20px;border:1px solid #4a473f;background:#26251f;color:#f6f5f2;font-size:12.5px;}
+  .controls input[type=search]::placeholder{color:#9a978d;}
+  #progressWrap{margin-top:10px;background:#33312c;border-radius:10px;overflow:hidden;height:8px;}
+  #progressBar{height:100%;background:linear-gradient(90deg,#4f9d6e,#2f7d4d);width:0%;transition:width .2s;}
+  #progressLabel{font-size:11.5px;color:#c9c6bd;margin-top:4px;}
+
+  main{max-width:920px;margin:0 auto;padding:20px 16px 0;}
+  section{margin-bottom:28px;}
+  h2.section-title{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border-bottom:2px solid var(--line);padding-bottom:6px;margin:0 0 14px;}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:14px;}
+
+  table.plain{width:100%;border-collapse:collapse;font-size:13px;}
+  table.plain th,table.plain td{border:1px solid var(--line);padding:6px 10px;text-align:left;}
+  table.plain th{background:#efece5;}
+
+  .badge{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.03em;margin-right:4px;}
+  .badge.p0{background:var(--p0-bg);color:var(--p0);}
+  .badge.p1{background:var(--p1-bg);color:var(--p1);}
+  .badge.p2{background:var(--p2-bg);color:var(--p2);}
+  .badge.positive{background:var(--pos-bg);color:var(--pos);}
+  .badge.negative{background:var(--neg-bg);color:var(--neg);}
+  .badge.regression{background:var(--reg-bg);color:var(--reg);}
+  .badge.scenario{background:#e7e2d6;color:#6b542b;}
+  .badge.blocked{background:#fbeae8;color:var(--block);}
+
+  details.tc{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden;}
+  details.tc[open]{border-color:#cfcabb;}
+  details.tc summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;align-items:center;flex-wrap:wrap;gap:6px;}
+  details.tc summary::-webkit-details-marker{display:none;}
+  details.tc summary .tcid{font-weight:700;font-size:13px;color:var(--ink);margin-right:2px;}
+  details.tc summary .tctitle{font-size:13.5px;color:var(--ink);flex:1;min-width:180px;}
+  details.tc summary .tcprogress{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;}
+  details.tc summary .arrow{font-size:11px;color:var(--muted);transition:transform .15s;}
+  details.tc[open] summary .arrow{transform:rotate(90deg);}
+  .tc-body{padding:0 18px 16px;border-top:1px solid var(--line);}
+  .tc-body p{margin:10px 0;font-size:13.5px;}
+  .tc-body .meta{color:var(--muted);font-size:12px;}
+  .tc-body .intro{font-style:italic;color:#3d3b36;background:#f8f6f1;border-left:3px solid var(--accent);padding:8px 12px;border-radius:4px;}
+  .tc-body ul{margin:4px 0;padding-left:20px;font-size:13px;}
+  .tc-body ol.steps{list-style:none;margin:6px 0;padding:0;}
+  .tc-body ol.steps li{border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin-bottom:7px;background:#fbfaf7;}
+  .tc-body ol.steps label{display:flex;gap:9px;align-items:flex-start;font-size:13.3px;cursor:pointer;}
+  .tc-body ol.steps input[type=checkbox]{margin-top:3px;flex-shrink:0;width:16px;height:16px;accent-color:#2f7d4d;}
+  .tc-body ol.steps .arrow-r{color:var(--muted);}
+  .tc-body .note{margin:5px 0 0 25px;font-size:12px;color:var(--muted);}
+  .tc-body .where,.tc-body .cleanup{font-size:12.5px;color:#454339;}
+  .blocked-banner{background:#fbeae8;color:var(--block);border:1px solid #f0c9c4;border-radius:6px;padding:7px 12px;font-size:12.5px;font-weight:600;margin:10px 0;}
+
+  .fact{color:var(--fact);font-weight:700;}
+  .hyp{color:var(--hyp);font-weight:700;}
+  .unk{color:var(--unk);font-weight:700;}
+
+  .instance-block{border-left:3px solid #cfcabb;padding-left:12px;margin:10px 0;}
+  .instance-block h4{margin:0 0 4px;font-size:12.5px;color:var(--accent);}
+
+  details.appendix{background:#efece5;border:1px dashed #cfcabb;border-radius:10px;padding:2px 16px;margin-bottom:12px;}
+  details.appendix summary{cursor:pointer;font-size:13px;font-weight:600;padding:10px 0;color:#4a4740;}
+  details.appendix .inner{padding-bottom:14px;font-size:13px;}
+
+  .open-q{background:#fdf6e3;border:1px solid #ecdca0;border-radius:8px;padding:12px 16px;font-size:13.3px;}
+
+  footer.foot{max-width:920px;margin:20px auto 0;padding:16px;color:var(--muted);font-size:11.5px;border-top:1px solid var(--line);}
+  code{background:#efece5;padding:1px 5px;border-radius:4px;font-size:12px;}
+  pre{background:#1c1b19;color:#e9e6dd;padding:10px 12px;border-radius:8px;overflow-x:auto;font-size:12px;}
+
+  [hidden]{display:none!important;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>{{TASK_KEY}} — {{название задачи}}, тест-план</h1>
+  <div class="sub">{{Deep/Light}} · MR/PR ссылки · собрано {{дата}}</div>
+  <div class="controls">
+    <button data-filter="all" class="active">Все</button>
+    <button data-filter="P0">P0</button>
+    <button data-filter="P1">P1</button>
+    <button data-filter="P2">P2</button>
+    <button data-filter="blocked">BLOCKED</button>
+    <input type="search" id="searchBox" placeholder="Поиск по ID/названию…">
+    <button id="expandAll">Развернуть всё</button>
+    <button id="collapseAll">Свернуть всё</button>
+  </div>
+  <div id="progressWrap"><div id="progressBar"></div></div>
+  <div id="progressLabel">0 / 0 шагов отмечено</div>
+</header>
+
+<main>
+
+<!-- Сводка: перенеси сюда итоговую таблицу (число TC, разбивка P0/P1/P2, что заблокировано) -->
+<section id="summary">
+  <h2 class="section-title">Сводка</h2>
+  <div class="card">
+    <table class="plain">
+      <tr><th>Показатель</th><th>Значение</th></tr>
+      <tr><td>{{показатель}}</td><td>{{значение}}</td></tr>
+    </table>
+    <p style="margin-top:12px;font-size:13px;"><strong>Ключевое:</strong> {{одна мысль, что меняет план}}</p>
+  </div>
+</section>
+
+<!-- Step 8.5 Чек-лист — ВСЕГДА включай эту секцию, это не опционально.
+     qa-impact-agent генерирует этот блок автоматически на каждом прогоне (see qa-impact-agent.md
+     Step 8.5) — 5-9 плоских чекбоксов без шагов/AC-ссылок/Covers, дистилляция P0+топ-P1.
+     Формат самого текста: **Код трогает:** / **Суть задачи:** / список чекбоксов. -->
+<section id="checklist85">
+  <h2 class="section-title">☑️ Чек-лист (быстрый прогон)</h2>
+  <div class="card">
+    <p class="meta"><strong>Код трогает:</strong> {{краткий список затронутых зон/файлов}}</p>
+    <p class="meta"><strong>Суть задачи:</strong> {{одна строка — что должно получиться}}</p>
+    <ol class="steps" style="list-style:none;margin:10px 0 0;padding:0;">
+      <li><label><input type="checkbox"> {{пункт}}</label></li>
+      <li><label><input type="checkbox"> {{пункт}}</label><div class="note">↳ {{если это подозреваемый баг — пометить тут}}</div></li>
+    </ol>
+  </div>
+</section>
+
+<!-- Опционально: блокеры (не тестируется сейчас) + открытые продуктовые вопросы (не TC) + Dev/PO вопросы.
+     Пропусти секцию целиком, если у задачи их нет. -->
+<section id="blockers">
+  <h2 class="section-title">Блокеры и открытые вопросы</h2>
+  <div class="card">
+    <div class="blocked-banner">🚫 BLOCKED: {{что именно и почему}}</div>
+    <p style="font-size:12.5px;">{{что заблокировано / что нет}}</p>
+  </div>
+  <div class="card open-q">
+    <strong>❓ OPEN QUESTION — не тест-кейс, не баг:</strong> {{вопрос, кто отвечает}}
+  </div>
+  <details class="appendix">
+    <summary>Вопросы → Dev / PO</summary>
+    <div class="inner">
+      <ul>
+        <li><strong>Dev:</strong> {{вопрос}} (TC-NN)</li>
+        <li><strong>PO:</strong> {{вопрос}} (TC-NN)</li>
+      </ul>
+    </div>
+  </details>
+</section>
+
+<!-- ============ P0 — обязательно ============ -->
+<section id="p0-section">
+<h2 class="section-title">P0 — обязательно</h2>
+
+<!-- TC EXAMPLE — copy this whole <details> block once per test case.
+     priority: P0|P1|P2 ; blocked: false|true|partial (drives the BLOCKED filter)
+     type badge: positive|negative|regression|scenario -->
+<details class="tc" data-priority="P0" data-blocked="false">
+<summary><span class="badge p0">P0</span><span class="badge positive">Positive</span><span class="tcid">TC-01</span><span class="tctitle">{{название теста}}</span><span class="tcprogress"></span><span class="arrow">▶</span></summary>
+<div class="tc-body">
+<p class="meta"><strong>AC:</strong> {{AC-ссылка или "not in AC"}} · <strong>Category:</strong> {{Functional/Regression/Data Integrity/...}}</p>
+<p class="covers"><strong>Covers:</strong> <span class="fact">[FACT]</span> {{конкретный файл/функция/условие из diff}}</p>
+<p class="intro">{{одно предложение: что проверяем и почему это важно, по-человечески}}</p>
+<div class="accounts"><strong>Аккаунты/данные:</strong><ul><li>{{если нужно нетривиальное}}</li></ul></div>
+<div class="preconditions"><strong>Предусловия:</strong><ul><li>{{только неочевидное}}</li></ul></div>
+<ol class="steps">
+<li><label><input type="checkbox"> {{действие}} → {{ожидаемый результат}}</label><div class="note">↳ {{только для нетривиальных шагов: какой риск верифицирует}}</div></li>
+<li><label><input type="checkbox"> {{следующее действие}} → {{ожидаемый результат}}</label></li>
+</ol>
+<p class="where"><strong>Где проверять:</strong> {{admin panel/logs/DB table/API response}}.</p>
+<p class="cleanup"><strong>Cleanup:</strong> {{что откатить или "не требуется"}}.</p>
+</div>
+</details>
+
+<!-- SC EXAMPLE — copy this shape only when 2+ TC genuinely share one live timer/stand/session
+     (per qa-impact-agent's own Scenario Format rules) — not just to look fancy. -->
+<details class="tc" data-priority="P0" data-blocked="false">
+<summary><span class="badge p0">P0</span><span class="badge scenario">Scenario</span><span class="tcid">SC-01</span><span class="tctitle">{{название сценария}}</span><span class="tcprogress"></span><span class="arrow">▶</span></summary>
+<div class="tc-body">
+<p class="meta"><strong>Type:</strong> Scenario — батчит N инстансов, делящих {{таймер/стенд/сессия}} · <strong>AC:</strong> {{...}} · <strong>Category:</strong> {{...}}</p>
+<p class="intro">{{что физически объединяет инстансы в один прогон}}</p>
+
+<div class="instance-block"><h4>Instance A — {{путь}}</h4>
+<p style="font-size:12.5px;">{{описание}}<br>Covers: <span class="fact">[FACT]</span> {{...}}</p></div>
+
+<div class="instance-block"><h4>Instance B — {{путь}}</h4>
+<p style="font-size:12.5px;">{{описание}}<br>Covers: <span class="fact">[FACT]</span> {{...}}</p></div>
+
+<ol class="steps">
+<li><label><input type="checkbox"> [A,B] {{общий сетап}} → {{исходное состояние}}</label></li>
+<li><label><input type="checkbox"> [A] {{действие}} → {{ожидание для A}}</label></li>
+<li><label><input type="checkbox"> [B] {{действие}} → {{ожидание для B}}</label></li>
+</ol>
+<p class="where"><strong>Где проверять:</strong> по каждому инстансу отдельно.</p>
+<p class="cleanup"><strong>Cleanup:</strong> {{...}}</p>
+</div>
+</details>
+
+</section>
+
+<!-- ============ P1 — рекомендовано ============ -->
+<section id="p1-section">
+<h2 class="section-title">P1 — рекомендовано</h2>
+<!-- copy TC blocks here, data-priority="P1" -->
+</section>
+
+<!-- ============ P2 — опционально ============ -->
+<section id="p2-section">
+<h2 class="section-title">P2 — опционально</h2>
+<!-- copy TC blocks here, data-priority="P2" -->
+</section>
+
+<!-- Опционально: приложения с доказательной базой (найденные факты, разрешённые TBD) —
+     сворачиваемые, для контекста, не для отметки галочками. -->
+<details class="appendix">
+<summary>Приложение — {{название}}</summary>
+<div class="inner">
+  <p>{{содержимое}}</p>
+</div>
+</details>
+
+</main>
+
+<footer class="foot">
+Источники: {{пути к analysis.md / трекеру / другим файлам}}. {{если Jira не трогалась — сказать явно}}. Отметки шагов сохраняются локально в этом браузере (localStorage) и не синхронизируются между устройствами.
+</footer>
+
+<script>
+(function(){
+  var STORAGE_KEY = '{{TASK_KEY}}-checklist-v1'; // unique per task so different tasks don't collide in localStorage
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) { state = {}; }
+
+  function save(){
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+  }
+
+  var allBoxes = [];
+  document.querySelectorAll('details.tc').forEach(function(tc, tcIdx){
+    var boxes = tc.querySelectorAll('input[type=checkbox]');
+    boxes.forEach(function(box, i){
+      if (!tc.id) tc.id = 'tc-auto-'+tcIdx;
+      var key = tc.id + '__' + i;
+      box.dataset.key = key;
+      if (state[key]) box.checked = true;
+      allBoxes.push(box);
+      box.addEventListener('change', function(){
+        state[key] = box.checked;
+        save();
+        updateProgress(tc);
+        updateGlobalProgress();
+      });
+    });
+    updateProgress(tc);
+  });
+
+  // standalone checkboxes outside details.tc (e.g. the ☑️ pre-flight checklist)
+  document.querySelectorAll('input[type=checkbox]').forEach(function(box, i){
+    if (box.dataset.key) return;
+    var key = 'standalone__' + i;
+    box.dataset.key = key;
+    if (state[key]) box.checked = true;
+    allBoxes.push(box);
+    box.addEventListener('change', function(){
+      state[key] = box.checked;
+      save();
+      updateGlobalProgress();
+    });
+  });
+
+  function updateProgress(tc){
+    var boxes = tc.querySelectorAll('input[type=checkbox]');
+    var checked = 0;
+    boxes.forEach(function(b){ if (b.checked) checked++; });
+    var label = tc.querySelector('.tcprogress');
+    if (label) label.textContent = '(' + checked + '/' + boxes.length + ')';
+  }
+
+  function updateGlobalProgress(){
+    var total = allBoxes.length, checked = 0;
+    allBoxes.forEach(function(b){ if (b.checked) checked++; });
+    var pct = total ? Math.round(checked/total*100) : 0;
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent = checked + ' / ' + total + ' шагов отмечено (' + pct + '%)';
+  }
+  updateGlobalProgress();
+
+  // auto-tag [FACT]/[HYPOTHESIS]/[UNKNOWN] occurrences left as plain text
+  function walk(node){
+    if (node.nodeType === 3){
+      var text = node.nodeValue;
+      if (/\[FACT\]|\[HYPOTHESIS\]|\[UNKNOWN\]/.test(text) && node.parentNode && !node.parentNode.classList.contains('fact') && !node.parentNode.classList.contains('hyp') && !node.parentNode.classList.contains('unk')){
+        var span = document.createElement('span');
+        span.innerHTML = text
+          .replace(/\[FACT\]/g, '<span class="fact">[FACT]</span>')
+          .replace(/\[HYPOTHESIS\]/g, '<span class="hyp">[HYPOTHESIS]</span>')
+          .replace(/\[UNKNOWN\]/g, '<span class="unk">[UNKNOWN]</span>');
+        node.parentNode.replaceChild(span, node);
+      }
+    } else if (node.nodeType === 1 && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE'){
+      Array.prototype.slice.call(node.childNodes).forEach(walk);
+    }
+  }
+  walk(document.querySelector('main'));
+
+  // filters
+  var filterBtns = document.querySelectorAll('.controls button[data-filter]');
+  filterBtns.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      filterBtns.forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      var f = btn.dataset.filter;
+      document.querySelectorAll('details.tc').forEach(function(tc){
+        var show = true;
+        if (f === 'P0' || f === 'P1' || f === 'P2') show = tc.dataset.priority === f;
+        else if (f === 'blocked') show = tc.dataset.blocked === 'true' || tc.dataset.blocked === 'partial';
+        tc.hidden = !show;
+      });
+      applySearch();
+    });
+  });
+
+  var searchBox = document.getElementById('searchBox');
+  function applySearch(){
+    var q = searchBox.value.trim().toLowerCase();
+    document.querySelectorAll('details.tc').forEach(function(tc){
+      if (tc.hidden && !q) return;
+      if (!q) { return; }
+      var text = tc.querySelector('summary').textContent.toLowerCase();
+      var match = text.indexOf(q) !== -1;
+      var activeFilter = document.querySelector('.controls button.active').dataset.filter;
+      var passesFilter = true;
+      if (activeFilter === 'P0' || activeFilter === 'P1' || activeFilter === 'P2') passesFilter = tc.dataset.priority === activeFilter;
+      else if (activeFilter === 'blocked') passesFilter = tc.dataset.blocked === 'true' || tc.dataset.blocked === 'partial';
+      tc.hidden = !(match && passesFilter);
+    });
+  }
+  searchBox.addEventListener('input', applySearch);
+
+  document.getElementById('expandAll').addEventListener('click', function(){
+    document.querySelectorAll('details').forEach(function(d){ d.open = true; });
+  });
+  document.getElementById('collapseAll').addEventListener('click', function(){
+    document.querySelectorAll('details.tc').forEach(function(d){ d.open = false; });
+  });
+})();
+</script>
+
+</body>
+</html>
