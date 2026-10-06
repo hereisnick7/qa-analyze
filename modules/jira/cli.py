@@ -233,6 +233,14 @@ def cmd_jira_comment(key: str, text: str, from_file: str = None, dry_run: bool =
     print(f"\n  Комментарий добавлен в {key} (id: {comment.get('id', '—')}).\n")
 
 
+def cmd_jira_comment_delete(key: str, comment_id: str, dry_run: bool = False):
+    result = _get_jira().delete_comment(key, comment_id, dry_run=dry_run)
+    if dry_run:
+        print(f"\n  DRY RUN: комментарий {comment_id} в {key} будет удалён.\n")
+        return
+    print(f"\n  Комментарий {comment_id} удалён из {key}.\n")
+
+
 def cmd_jira_transition(key: str, target: str, comment: str = None, comment_from_file: str = None, dry_run: bool = False):
     comment_text = _read_text_arg(comment, comment_from_file) if (comment or comment_from_file) else None
     result = _get_jira().transition_issue(key, target, comment=comment_text, dry_run=dry_run)
@@ -304,6 +312,28 @@ def cmd_jira_attach(key: str, file_path: str, dry_run: bool = False):
         return
     size_kb = f"{result['size'] / 1024:.1f}KB"
     print(f"\n  Файл '{result['filename']}' ({size_kb}) прикреплён к {key}.\n")
+
+
+def cmd_jira_attachment_delete(key: str, attachment_id: str, dry_run: bool = False):
+    result = _get_jira().delete_attachment(attachment_id, dry_run=dry_run)
+    if dry_run:
+        print(f"\n  DRY RUN: вложение {attachment_id} в {key} будет удалено.\n")
+        return
+    print(f"\n  Вложение {attachment_id} удалено из {key}.\n")
+
+
+def cmd_jira_comment_attach(key: str, file_path: str, text: str = "", dry_run: bool = False):
+    result = _get_jira().add_comment_with_attachment(key, file_path, text=text, dry_run=dry_run)
+    if dry_run:
+        size_kb = f"{result['size'] / 1024:.1f}KB"
+        print(f"\n  DRY RUN: комментарий с вложением '{result['filename']}' ({size_kb}) будет добавлен к {key}.")
+        if result["text"]:
+            print(f"  Текст комментария:\n  {result['text']}\n")
+        else:
+            print("  Текст комментария: (пусто, только файл)\n")
+        return
+    size_kb = f"{result['size'] / 1024:.1f}KB"
+    print(f"\n  Комментарий с вложением '{result['filename']}' ({size_kb}) добавлен к {key}.\n")
 
 
 def cmd_jira_download(key: str, attachment_id: str = None, name: str = None, out: str = None, all_files: bool = False):
@@ -426,8 +456,8 @@ def cmd_confluence_create(space: str, title: str, text: str, from_file: str = No
 
 JIRA_COMMANDS = {
     "jira-info", "jira-mine", "jira-task", "jira-search", "jira-transitions",
-    "jira-attachments", "jira-attach", "jira-download", "jira-comments", "jira-dev-status",
-    "jira-append", "jira-set-description", "jira-comment", "jira-transition",
+    "jira-attachments", "jira-attach", "jira-attachment-delete", "jira-comment-attach", "jira-download", "jira-comments", "jira-dev-status",
+    "jira-append", "jira-set-description", "jira-comment", "jira-comment-delete", "jira-transition",
     "confluence-page", "confluence-update", "confluence-create",
 }
 
@@ -476,6 +506,27 @@ def run_command(cmd: str, parts: list) -> bool:
                 parser.add_argument("--dry-run", action="store_true")
                 args = parser.parse_args(parts[1:])
                 cmd_jira_attach(args.key.upper(), args.file_path, dry_run=args.dry_run)
+        elif cmd == "jira-attachment-delete":
+            if len(parts) < 3:
+                print("  Использование: jira-attachment-delete <KEY> <attachment_id> [--dry-run]")
+            else:
+                parser = argparse.ArgumentParser(prog="jira-attachment-delete", add_help=False)
+                parser.add_argument("key")
+                parser.add_argument("attachment_id")
+                parser.add_argument("--dry-run", action="store_true")
+                args = parser.parse_args(parts[1:])
+                cmd_jira_attachment_delete(args.key.upper(), args.attachment_id, dry_run=args.dry_run)
+        elif cmd == "jira-comment-attach":
+            if len(parts) < 3:
+                print("  Использование: jira-comment-attach <KEY> <file_path> [--text=\"...\"] [--dry-run]")
+            else:
+                parser = argparse.ArgumentParser(prog="jira-comment-attach", add_help=False)
+                parser.add_argument("key")
+                parser.add_argument("file_path")
+                parser.add_argument("--text", default="")
+                parser.add_argument("--dry-run", action="store_true")
+                args = parser.parse_args(parts[1:])
+                cmd_jira_comment_attach(args.key.upper(), args.file_path, text=args.text, dry_run=args.dry_run)
         elif cmd == "jira-comments":
             if len(parts) < 2:
                 print("  Использование: jira-comments <KEY>")
@@ -535,6 +586,16 @@ def run_command(cmd: str, parts: list) -> bool:
                 parser.add_argument("--dry-run", action="store_true")
                 args = parser.parse_args(parts[1:])
                 cmd_jira_comment(args.key.upper(), " ".join(args.text), from_file=args.from_file, dry_run=args.dry_run)
+        elif cmd == "jira-comment-delete":
+            if len(parts) < 3:
+                print("  Использование: jira-comment-delete <KEY> <comment_id> [--dry-run]")
+            else:
+                parser = argparse.ArgumentParser(prog="jira-comment-delete", add_help=False)
+                parser.add_argument("key")
+                parser.add_argument("comment_id")
+                parser.add_argument("--dry-run", action="store_true")
+                args = parser.parse_args(parts[1:])
+                cmd_jira_comment_delete(args.key.upper(), args.comment_id, dry_run=args.dry_run)
         elif cmd == "jira-transition":
             if len(parts) < 3:
                 print("  Использование: jira-transition <KEY> <target> [--comment=...] [--comment-from-file=<path>] [--dry-run]")

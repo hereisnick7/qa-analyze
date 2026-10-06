@@ -1,6 +1,6 @@
 ---
 name: qa-impact-agent
-version: "1.9"
+version: "1.10"
 description: >
   Backend-aware QA Impact Agent for Betzo. Analyzes a Jira task + GitLab MR:
   discovers what actually changed vs what Jira claims, maps business logic impact,
@@ -405,10 +405,10 @@ Generate **only** on explicit request: "Generate test cases" / "Напиши т�
 
 **HTML delivery (explicit request only — "html чек-лист" / "тест-план в html"):**
 produce this Step's content exactly as normal (including Step 8.5's Чек-лист —
-never skip it just because delivery is HTML), then fill it into the template at
-`.claude/skills/qa-analyze/assets/qa-checklist-template.html` per its own inline
-instructions and the process in `docs/agent/qa-html-checklist.md`. Do not
-hand-roll new HTML/CSS/JS — copy the template's existing patterns.
+never skip it just because delivery is HTML). Do not hand-write HTML/CSS/JS at
+all — transcribe the same TC-NN/SC-NN/checklist content you already produced
+into the JSON data shape and run the fill script; see
+`docs/agent/qa-html-checklist.md` for the exact schema and invocation.
 
 ### Format
 

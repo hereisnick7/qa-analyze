@@ -342,12 +342,14 @@ when the user asks for it directly ("html чек-лист", "тест-план �
 [`docs/agent/qa-html-checklist.md`](../../../docs/agent/qa-html-checklist.md).
 
 1. Re-invoke `qa-impact-agent` with the same test-case scope as step 7, adding:
-   "Also deliver as HTML per `docs/agent/qa-html-checklist.md` — fill
-   `.claude/skills/qa-analyze/assets/qa-checklist-template.html` and write to
+   "Also deliver as HTML per `docs/agent/qa-html-checklist.md` — write
+   `tasks/qa/{KEY}/checklist-data.json` per the schema there, then run
+   `.claude/skills/qa-analyze/assets/fill_checklist.py` to produce
    `tasks/qa/{KEY}/checklist.html`."
-2. After it returns, verify tag balance yourself before offering delivery
-   (the doc above has the exact check) — do not skip this even if the agent
-   reports success.
+2. The fill script itself fails fast (non-zero exit) on unbalanced tags or an
+   unfilled placeholder — confirm it reported success (exit 0 + the `wrote
+   ...` line) before offering delivery; do not offer a file the script didn't
+   confirm.
 3. Ask: "Прикрепить этот HTML к задаче в Jira? (вложение, не тело коммента —
    Jira не рендерит HTML)"
 4. If yes: `workflow jira-attach {KEY} tasks/qa/{KEY}/checklist.html --dry-run`

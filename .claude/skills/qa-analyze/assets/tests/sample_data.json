@@ -1,0 +1,127 @@
+{
+  "task_key": "PAY-101",
+  "title": "Provider X — deposit webhook",
+  "sub_meta": "MR backend!512 · собрано 2026-09-15",
+  "summary_rows": [
+    [
+      "Test Cases",
+      "3 (P0: 1, P1: 1, P2: 1)"
+    ],
+    [
+      "MR",
+      "backend!512"
+    ]
+  ],
+  "summary_key_point": "Зачисление по success-хуку — фокус на сумме и повторе.",
+  "checklist": {
+    "code_touches": "payments/provider_x/webhook.py",
+    "essence": "Success-хук зачисляет депозит ровно один раз",
+    "items": [
+      {
+        "text": "Success-хук → ENROLLED + баланс",
+        "note": "← подозрение S-01"
+      },
+      {
+        "text": "Повтор хука не зачисляет второй раз",
+        "note": ""
+      }
+    ]
+  },
+  "blockers": [],
+  "open_questions": [
+    "Кто подтверждает статусы у провайдера на DEV?"
+  ],
+  "dev_po_questions": [
+    {
+      "who": "Dev",
+      "text": "Сумма из хука перезаписывает сумму депозита?",
+      "ref": "TC-01"
+    }
+  ],
+  "test_cases": [
+    {
+      "id": "TC-01",
+      "type": "Positive",
+      "title": "Success-хук зачисляет депозит",
+      "priority": "P0",
+      "blocked": "false",
+      "ac_ref": "AC 2",
+      "category": "Functional",
+      "covers": "[FACT] payments/provider_x/webhook.py:88 — enroll",
+      "intro": "Проверяем зачисление по success-хуку.",
+      "accounts": [
+        "Игрок с нулевым балансом"
+      ],
+      "preconditions": [
+        "Депозит в PENDING"
+      ],
+      "steps": [
+        {
+          "action": "Отправить success-хук",
+          "expected": "HTTP 200, депозит ENROLLED",
+          "note": "синтетика через pay-hook"
+        },
+        {
+          "action": "Проверить баланс",
+          "expected": "Баланс вырос ровно на сумму"
+        }
+      ],
+      "where": "Admin → Deposits",
+      "cleanup": "не требуется"
+    },
+    {
+      "id": "TC-02",
+      "type": "Negative",
+      "title": "Описание <b>&amp;</b> в хуке не ломает лог",
+      "priority": "P1",
+      "blocked": "false",
+      "ac_ref": "not in AC",
+      "category": "Regression",
+      "covers": "[HYPOTHESIS] спецсимволы & в полях хука",
+      "intro": "Проверка, что спецсимволы & не ломают рендер лога.",
+      "accounts": [],
+      "preconditions": [],
+      "steps": [
+        {
+          "action": "Отправить хук с полем, содержащим <b>&amp;</b>",
+          "expected": "Значение экранировано в логе"
+        }
+      ],
+      "where": "Admin → Deposit logs",
+      "cleanup": "не требуется"
+    },
+    {
+      "id": "TC-03",
+      "type": "RBAC",
+      "title": "Ручной перевод статуса недоступен без прав",
+      "priority": "P2",
+      "blocked": "partial",
+      "blocked_reason": "нет тестового аккаунта без прав",
+      "ac_ref": "AC 4",
+      "category": "RBAC",
+      "covers": "[FACT] admin permission gate",
+      "intro": "Проверка прав на ручную смену статуса.",
+      "accounts": [
+        "Админ без роли payments"
+      ],
+      "preconditions": [],
+      "steps": [
+        {
+          "action": "Открыть депозит как админ без роли",
+          "expected": "Кнопка смены статуса скрыта"
+        }
+      ],
+      "where": "Admin",
+      "cleanup": "не требуется"
+    }
+  ],
+  "scenarios": [],
+  "appendices": [
+    {
+      "title": "Резолв TBD",
+      "content": "Сумма из хука перезаписывает исходную — подтверждено лидом."
+    }
+  ],
+  "sources": "analysis.md, MR backend!512",
+  "jira_note": "Jira PAY-101 не трогалась — dry-run чек-листа"
+}

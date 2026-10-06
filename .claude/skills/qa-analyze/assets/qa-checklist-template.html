@@ -1,9 +1,7 @@
 <!--
-  qa-checklist-template.html — base template for /qa-analyze HTML test-case delivery.
-
-  Origin: built live 2026-09-07 for DEV-2685 (Sequential Bonuses client test plan),
-  approved by the user as "the base to reuse going forward — only the information
-  changes, style/notes/dropdowns stay as-is."
+  qa-checklist-template.html — base template for /qa-analyze HTML test-case delivery
+  (filled by fill_checklist.py; only the information changes, style/notes/dropdowns
+  stay as-is).
 
   HOW TO USE THIS TEMPLATE:
   1. Copy this whole file, keep <style> and <script> blocks BYTE-FOR-BYTE unchanged —
@@ -13,7 +11,14 @@
      with the real task's content.
   3. For every test case, copy ONE "TC EXAMPLE" block below and fill in its fields —
      do not invent new markup patterns. Keep each <details class="tc"> a self-contained
-     copy so a missing closing tag stays localized.
+     copy so a missing closing tag stays localized. Every TC/SC block carries a
+     `.comment-block` (a free-text <textarea>) at the end, right after Cleanup — leave
+     it EMPTY, placeholder text only. This is the user's own field for live notes while
+     running the test (e.g. "фильтр показывает лишние записи после смены статуса" — a
+     direct empirical finding recorded in their own words during the pass, not a
+     scripted expected result). It persists via the same
+     localStorage mechanism as the checkboxes — never remove it, never pre-fill it with
+     agent-authored text.
   4. For a Scenario (2+ TCs sharing one live timer/environment), copy the "SC EXAMPLE"
      block instead — same outer shape, instances rendered as labeled sub-blocks.
   5. Appendices (evidence tables, resolved TBDs, Dev/PO questions) go in
@@ -25,6 +30,13 @@
   7. Delivery: Jira comments do NOT render HTML/CSS/JS (sanitized) — this file goes
      out as a Jira ATTACHMENT (or a local file next to the task), never pasted into
      a comment body.
+  8. "Скачать с отметками" button: state (checkboxes + comments) lives in the
+     browser's localStorage while the user is testing, but that never travels with
+     the file itself — re-attaching/re-sharing the same file elsewhere carries none
+     of it. The button bakes current live state into a fresh, self-contained HTML
+     file (checked attributes + textarea contents written directly into the markup)
+     so it can be read by anyone/anything (including an agent) without a browser
+     session. Never remove this button or its handler when filling the template.
 -->
 <!DOCTYPE html>
 <html lang="ru">
@@ -97,6 +109,12 @@
   .tc-body .where,.tc-body .cleanup{font-size:12.5px;color:#454339;}
   .blocked-banner{background:#fbeae8;color:var(--block);border:1px solid #f0c9c4;border-radius:6px;padding:7px 12px;font-size:12.5px;font-weight:600;margin:10px 0;}
 
+  .comment-block{margin-top:12px;}
+  .comment-block label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;}
+  .comment-block textarea{width:100%;min-height:56px;border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fbfaf7;resize:vertical;}
+  .comment-block textarea:focus{outline:none;border-color:var(--accent);}
+  .comment-block textarea.filled{border-color:var(--accent);background:#fdf9f2;}
+
   .fact{color:var(--fact);font-weight:700;}
   .hyp{color:var(--hyp);font-weight:700;}
   .unk{color:var(--unk);font-weight:700;}
@@ -131,6 +149,7 @@
     <input type="search" id="searchBox" placeholder="Поиск по ID/названию…">
     <button id="expandAll">Развернуть всё</button>
     <button id="collapseAll">Свернуть всё</button>
+    <button id="exportAnnotated" title="Сохраняет отметки/комментарии прямо в файл — этот файл можно передавать/прикладывать где угодно">⬇ Скачать с отметками</button>
   </div>
   <div id="progressWrap"><div id="progressBar"></div></div>
   <div id="progressLabel">0 / 0 шагов отмечено</div>
@@ -209,6 +228,7 @@
 </ol>
 <p class="where"><strong>Где проверять:</strong> {{admin panel/logs/DB table/API response}}.</p>
 <p class="cleanup"><strong>Cleanup:</strong> {{что откатить или "не требуется"}}.</p>
+<div class="comment-block"><label>💬 Комментарий (заполняется во время прогона):</label><textarea placeholder="Свободный текст — наблюдение, факт, отклонение от ожидания, ссылка на баг…"></textarea></div>
 </div>
 </details>
 
@@ -233,6 +253,7 @@
 </ol>
 <p class="where"><strong>Где проверять:</strong> по каждому инстансу отдельно.</p>
 <p class="cleanup"><strong>Cleanup:</strong> {{...}}</p>
+<div class="comment-block"><label>💬 Комментарий (заполняется во время прогона):</label><textarea placeholder="Свободный текст — наблюдение, факт, отклонение от ожидания, ссылка на баг…"></textarea></div>
 </div>
 </details>
 
@@ -262,7 +283,7 @@
 </main>
 
 <footer class="foot">
-Источники: {{пути к analysis.md / трекеру / другим файлам}}. {{если Jira не трогалась — сказать явно}}. Отметки шагов сохраняются локально в этом браузере (localStorage) и не синхронизируются между устройствами.
+Источники: {{пути к analysis.md / трекеру / другим файлам}}. {{если Jira не трогалась — сказать явно}}. Отметки шагов сохраняются локально в этом браузере (localStorage) и не синхронизируются между устройствами — нажми «⬇ Скачать с отметками» вверху, чтобы получить файл с уже встроенным текущим состоянием (можно прикладывать/пересылать как есть).
 </footer>
 
 <script>
@@ -282,6 +303,7 @@
       if (!tc.id) tc.id = 'tc-auto-'+tcIdx;
       var key = tc.id + '__' + i;
       box.dataset.key = key;
+      box.dataset.qaScope = 'tc';
       if (state[key]) box.checked = true;
       allBoxes.push(box);
       box.addEventListener('change', function(){
@@ -292,12 +314,26 @@
       });
     });
     updateProgress(tc);
+
+    var comment = tc.querySelector('.comment-block textarea');
+    if (comment) {
+      var ckey = tc.id + '__comment';
+      if (state[ckey]) {
+        comment.value = state[ckey];
+      }
+      comment.classList.toggle('filled', comment.value.trim() !== '');
+      comment.addEventListener('input', function(){
+        state[ckey] = comment.value;
+        save();
+        comment.classList.toggle('filled', comment.value.trim() !== '');
+      });
+    }
   });
 
   // standalone checkboxes outside details.tc (e.g. the ☑️ pre-flight checklist)
   document.querySelectorAll('input[type=checkbox]').forEach(function(box, i){
-    if (box.dataset.key) return;
-    var key = 'standalone__' + i;
+    if (box.dataset.qaScope === 'tc') return;
+    var key = box.dataset.key || ('standalone__' + i);
     box.dataset.key = key;
     if (state[key]) box.checked = true;
     allBoxes.push(box);
@@ -382,6 +418,42 @@
   });
   document.getElementById('collapseAll').addEventListener('click', function(){
     document.querySelectorAll('details.tc').forEach(function(d){ d.open = false; });
+  });
+
+  document.getElementById('exportAnnotated').addEventListener('click', function(){
+    var clone = document.documentElement.cloneNode(true);
+
+    var liveBoxes = document.querySelectorAll('input[type=checkbox]');
+    var cloneBoxes = clone.querySelectorAll('input[type=checkbox]');
+    liveBoxes.forEach(function(box, i){
+      if (box.checked) cloneBoxes[i].setAttribute('checked', 'checked');
+      else cloneBoxes[i].removeAttribute('checked');
+    });
+
+    var liveTAs = document.querySelectorAll('textarea');
+    var cloneTAs = clone.querySelectorAll('textarea');
+    liveTAs.forEach(function(ta, i){
+      cloneTAs[i].textContent = ta.value;
+    });
+
+    var liveDetails = document.querySelectorAll('details');
+    var cloneDetails = clone.querySelectorAll('details');
+    liveDetails.forEach(function(d, i){
+      if (d.open) cloneDetails[i].setAttribute('open', '');
+      else cloneDetails[i].removeAttribute('open');
+    });
+
+    var html = '<!DOCTYPE html>\n' + clone.outerHTML;
+    var blob = new Blob([html], { type: 'text/html' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    var base = (document.title || 'checklist').replace(/[^\w\-. ]+/g, '_').trim() || 'checklist';
+    a.download = base + '-annotated.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
   });
 })();
 </script>

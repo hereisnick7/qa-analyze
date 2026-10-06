@@ -527,6 +527,12 @@ class JiraClient:
         resp.raise_for_status()
         return resp.json() if resp.text.strip() else {}
 
+    def _delete(self, path: str) -> Any:
+        url = f"{self.base_url}/rest/api/3{path}"
+        resp = self.session.delete(url, timeout=(5, 15))
+        resp.raise_for_status()
+        return resp.json() if resp.text.strip() else {}
+
     def _write_guard(self):
         if not JIRA_WRITE_ENABLED:
             raise NotImplementedError(
@@ -624,6 +630,80 @@ class JiraClient:
         uploaded = resp.json() if resp.text.strip() else []
         return {"key": key, "filename": path.name, "size": size, "uploaded": uploaded}
 
+    def delete_attachment(self, attachment_id: str, *, dry_run: bool = False) -> dict:
+        self._write_guard()
+        if dry_run:
+            return {"dry_run": True, "attachment_id": attachment_id}
+        self._delete(f"/attachment/{attachment_id}")
+        return {"attachment_id": attachment_id, "deleted": True}
+
+    def add_comment_with_attachment(
+        self, key: str, file_path: str, *, text: str = "", dry_run: bool = False
+    ) -> dict:
+        """
+        Post a comment with a file embedded inline in its body — the same
+        result as dragging a file into Jira's comment editor — instead of a
+        bare issue-level attachment with no comment of its own.
+
+        Jira has no single "attach to a comment" endpoint: the file still goes
+        through the ordinary attachments upload, then its returned attachment
+        `id` is referenced from an ADF `mediaSingle`/`media` node in the
+        comment body with `collection: "jira"` (Jira's fixed collection name
+        for issue attachments) so it renders inline in that comment.
+        `text` is optional — pass "" for a comment that carries only the file.
+        """
+        self._write_guard()
+        from pathlib import Path as _Path
+        path = _Path(file_path).expanduser().resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"Attachment file not found: {path}")
+        size = path.stat().st_size
+
+        body_content: list[dict] = []
+        if text:
+            assert_valid_jira_write_text(text)
+            body_content.extend(text_to_adf(text)["content"])
+
+        if dry_run:
+            preview_media = {
+                "type": "mediaSingle",
+                "attrs": {"layout": "center"},
+                "content": [{"type": "media", "attrs": {"id": "<uploaded-attachment-id>", "type": "file", "collection": "jira"}}],
+            }
+            payload = {"body": {"type": "doc", "version": 1, "content": [*body_content, preview_media]}}
+            return {
+                "dry_run": True,
+                "key": key,
+                "file_path": str(path),
+                "filename": path.name,
+                "size": size,
+                "text": text,
+                "payload": payload,
+            }
+
+        url = f"{self.base_url}/rest/api/3/issue/{key}/attachments"
+        with open(path, "rb") as f:
+            resp = self.session.post(
+                url,
+                files={"file": (path.name, f)},
+                headers={"X-Atlassian-Token": "no-check", "Content-Type": None},
+                timeout=(5, 60),
+            )
+        resp.raise_for_status()
+        uploaded = resp.json() if resp.text.strip() else []
+        if not uploaded:
+            raise RuntimeError(f"Jira attachment upload for {key} returned no result")
+        attachment_id = uploaded[0]["id"]
+
+        media_node = {
+            "type": "mediaSingle",
+            "attrs": {"layout": "center"},
+            "content": [{"type": "media", "attrs": {"id": attachment_id, "type": "file", "collection": "jira"}}],
+        }
+        payload = {"body": {"type": "doc", "version": 1, "content": [*body_content, media_node]}}
+        comment = self._post(f"/issue/{key}/comment", payload)
+        return {"key": key, "filename": path.name, "size": size, "attachment_id": attachment_id, "comment": comment}
+
     def search(self, jql: str, fields: Optional[list] = None, max_results: int = 50) -> dict:
         # POST /rest/api/3/search/jql — актуальный эндпоинт (GET /search — 410 Gone)
         # Без явного fields API возвращает только id; передаём дефолтный набор.
@@ -681,7 +761,7 @@ class JiraClient:
         Returns a list of dicts: id ("path/to/repo!N"), status, url, repository_name,
         source_branch, target_branch, last_update. Empty list = no linked MR, not an error.
 
-        Confirmed live 2026-07-03 against DEV-2842. Two things the standard Jira Cloud
+        Confirmed live 2026-07-03. Two things the standard Jira Cloud
         dev-status docs don't make obvious:
         - The `applicationType` id is NOT the literal string "GitLab" — it's whatever
           this instance's connect app is registered as (here:
@@ -844,6 +924,13 @@ class JiraClient:
             return {"dry_run": True, "key": key, "text": text, "payload": payload}
         comment = self._post(f"/issue/{key}/comment", payload)
         return {"key": key, "comment": comment}
+
+    def delete_comment(self, key: str, comment_id: str, *, dry_run: bool = False) -> dict:
+        self._write_guard()
+        if dry_run:
+            return {"dry_run": True, "key": key, "comment_id": comment_id}
+        self._delete(f"/issue/{key}/comment/{comment_id}")
+        return {"key": key, "comment_id": comment_id, "deleted": True}
 
     def transition_issue(
         self,

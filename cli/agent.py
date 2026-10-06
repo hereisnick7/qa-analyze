@@ -28,9 +28,14 @@ from modules.jira.cli import run_command as jira_run  # noqa: E402
 
 HELP = """
   Jira:
-    jira-task <KEY>                       — task details + comments
+    jira-task <KEY>                       — task details
+    jira-comments <KEY>                   — ALL comments, full text
     jira-attachments <KEY>                — list attachments
-    jira-comment <KEY> "<text>"           — post comment
+    jira-download <KEY> [--name=<file>|--id=<id>|--all]  — download attachment(s)
+    jira-dev-status <KEY>                 — MRs linked to the task
+    jira-comment <KEY> "<text>" [--from-file=<path>] [--dry-run]  — post comment
+    jira-attach <KEY> <file> [--dry-run]  — attach a file (e.g. HTML checklist)
+    jira-attachment-delete <KEY> <attachment_id> [--dry-run]  — remove an attachment (re-attach a fixed checklist without duplicates)
     jira-mine [--status=...]              — my issues
     jira-search "<jql>"                   — search issues
 
